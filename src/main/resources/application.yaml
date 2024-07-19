@@ -1,0 +1,12 @@
+spring:
+  application:
+    name: email-sender
+  mail:
+    host: ${mail-host:localhost}
+    port: ${mail-port:25}
+    properties:
+      mail:
+        smtp:
+          auth: ${mail-smtp-auth:false}
+          starttls:
+            enable: ${mail-smtp-starttls-enable:false}
