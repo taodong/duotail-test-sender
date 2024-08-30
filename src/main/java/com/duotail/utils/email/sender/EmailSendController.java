@@ -1,5 +1,7 @@
 package com.duotail.utils.email.sender;
 
+import jakarta.mail.MessagingException;
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
@@ -15,7 +17,7 @@ public class EmailSendController {
     }
 
     @PostMapping
-    public void sendEmail(@RequestBody EmailRequest emailRequest) {
-        emailSendService.sendEmail(emailRequest.getTo(), emailRequest.getSubject(), emailRequest.getText());
+    public void sendEmail(@Valid @RequestBody EmailRequest emailRequest) throws MessagingException {
+        emailSendService.sendEmail(emailRequest);
     }
 }

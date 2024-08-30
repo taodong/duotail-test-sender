@@ -1,10 +1,21 @@
 package com.duotail.utils.email.sender;
 
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
 import lombok.Data;
+
+import java.util.Set;
 
 @Data
 public class EmailRequest {
-    private String to;
+    @NotBlank
+    private String from;
+    @NotEmpty
+    private Set<String> to;
+    private Set<String> cc;
+    private Set<String> bcc;
+    @NotBlank
     private String subject;
-    private String text;
+    @NotBlank
+    private String content;
 }
