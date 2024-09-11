@@ -9,6 +9,7 @@ import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 
+import java.util.Collection;
 import java.util.Properties;
 
 
@@ -39,5 +40,15 @@ public class EmailSendService {
         mimeHelper.setText(emailRequest.getContent());
 
         javaMailSender.send(message);
+    }
+
+    public void sendEmails(Collection<EmailRequest> emailRequests) {
+        emailRequests.forEach(emailRequest -> {
+            try {
+                sendEmail(emailRequest);
+            } catch (MessagingException e) {
+                LOG.error("Failed to send email", e);
+            }
+        });
     }
 }
