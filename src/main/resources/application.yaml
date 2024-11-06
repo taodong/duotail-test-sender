@@ -10,3 +10,11 @@ spring:
           auth: ${mail-smtp-auth:false}
           starttls:
             enable: ${mail-smtp-starttls-enable:false}
+
+
+app:
+  gmail:
+    username: ${gmail-username}
+    password: ${gmail-password}
+    host: ${gmail-host:smtp.gmail.com}
+    port: ${gmail-port:587}
