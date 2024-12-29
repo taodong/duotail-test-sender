@@ -1,5 +1,7 @@
 package com.duotail.utils.email.sender;
 
+import io.github.taodong.mail.dkim.DkimMimeMessageHelper;
+import io.github.taodong.mail.dkim.DkimSigningService;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 import org.junit.jupiter.api.Test;
@@ -17,11 +19,18 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mockConstruction;
 import static org.mockito.Mockito.verify;
 
+@SuppressWarnings("unused")
 @ExtendWith(MockitoExtension.class)
 class EmailSendServiceTest {
 
     @Mock
     private JavaMailSender javaMailSender;
+    @Mock
+    private DkimSignerProperties dkimSignerProperties;
+    @Mock
+    private DkimSigningService dkimSigningService;
+    @Mock
+    private DkimMimeMessageHelper dkimMimeMessageHelper;
 
     @InjectMocks
     private EmailSendService emailSendService;
@@ -38,7 +47,7 @@ class EmailSendServiceTest {
 
         try(MockedConstruction<MimeMessageHelper> mocked = mockConstruction(MimeMessageHelper.class)) {
             emailSendService.sendEmail(emailRequest);
-            MimeMessageHelper mockHelper = mocked.constructed().get(0);
+            MimeMessageHelper mockHelper = mocked.constructed().getFirst();
             verify(mockHelper).setFrom("fn ln <fn.ln@whatever.com>");
             verify(mockHelper).setTo(any(String[].class));
             verify(mockHelper).setCc(any(String[].class));

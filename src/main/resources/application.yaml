@@ -18,3 +18,10 @@ app:
     password: ${gmail-password}
     host: ${gmail-host:smtp.gmail.com}
     port: ${gmail-port:587}
+  dkim:
+    enabled: ${dkim-enabled:false}
+    private-key-path: ${dkim-private-key}
+    selector: ${dkim-selector}
+    domain: ${dkim-domain}
+    body-canonicalization: ${dkim-body-canonicalization:simple}
+    header-canonicalization: ${dkim-header-canonicalization:simple}
