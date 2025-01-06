@@ -29,7 +29,7 @@
 	<properties>
 		<java.version>21</java.version>
 		<commons-collections.version>4.4</commons-collections.version>
-		<dkim.signer.version>1.0.0-SNAPSHOT</dkim.signer.version>
+		<dkim.signer.version>1.0.0</dkim.signer.version>
 		<lombok.version>1.18.36</lombok.version>
 	</properties>
 	<dependencies>
