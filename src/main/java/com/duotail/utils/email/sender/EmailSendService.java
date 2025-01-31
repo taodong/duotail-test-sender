@@ -51,7 +51,8 @@ public class EmailSendService {
             mimeHelper.setBcc(emailRequest.getBcc().toArray(new String[0]));
         }
         mimeHelper.setSubject(emailRequest.getSubject());
-        mimeHelper.setText(emailRequest.getContent());
+        mimeHelper.setText(emailRequest.getContent(), true);
+
 
         signDkim(message, emailRequest.getFrom());
         javaMailSender.send(message);
