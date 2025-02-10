@@ -4,6 +4,8 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import lombok.Data;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Set;
 
 @Data
@@ -18,4 +20,5 @@ public class EmailRequest {
     private String subject;
     @NotBlank
     private String content;
+    private Map<String, String> extraHeaders = new HashMap<>();
 }

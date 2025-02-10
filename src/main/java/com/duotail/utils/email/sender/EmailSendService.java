@@ -53,6 +53,9 @@ public class EmailSendService {
         mimeHelper.setSubject(emailRequest.getSubject());
         mimeHelper.setText(emailRequest.getContent(), true);
 
+        for (var entry : emailRequest.getExtraHeaders().entrySet()) {
+            message.addHeader(entry.getKey(), entry.getValue());
+        }
 
         signDkim(message, emailRequest.getFrom());
         javaMailSender.send(message);

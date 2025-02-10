@@ -53,7 +53,7 @@ class EmailSendServiceTest {
             verify(mockHelper).setCc(any(String[].class));
             verify(mockHelper).setBcc(any(String[].class));
             verify(mockHelper).setSubject("subject");
-            verify(mockHelper).setText("content");
+            verify(mockHelper).setText("content", true);
             verify(javaMailSender).send(any(MimeMessage.class));
         }
 
