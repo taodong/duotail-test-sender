@@ -17,6 +17,8 @@ import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 
+import java.io.InputStream;
+import java.io.UnsupportedEncodingException;
 import java.util.Collection;
 import java.util.Properties;
 
@@ -50,6 +52,9 @@ public class EmailSendService {
         if (CollectionUtils.isNotEmpty(emailRequest.getBcc())) {
             mimeHelper.setBcc(emailRequest.getBcc().toArray(new String[0]));
         }
+        if (StringUtils.isNotBlank(emailRequest.getMessageId())) {
+            message.setHeader("Message-ID", emailRequest.getMessageId());
+        }
         mimeHelper.setSubject(emailRequest.getSubject());
         mimeHelper.setText(emailRequest.getContent(), true);
 
@@ -58,6 +63,14 @@ public class EmailSendService {
         }
 
         signDkim(message, emailRequest.getFrom());
+        javaMailSender.send(message);
+    }
+
+    public void sendEmailInFile(InputStream emailFile) throws MessagingException, UnsupportedEncodingException {
+        var message = new MimeMessage(Session.getDefaultInstance(properties, null), emailFile);
+        var from = new InternetAddress("1_a_test2.user2_56q@1cxym4dev.info", "Test2 User2");
+        LOG.info("From address signed: {}", from.getAddress());
+        signDkim(message, from.getAddress());
         javaMailSender.send(message);
     }
 

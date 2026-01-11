@@ -21,4 +21,5 @@ public class EmailRequest {
     @NotBlank
     private String content;
     private Map<String, String> extraHeaders = new HashMap<>();
+    private String messageId;
 }
