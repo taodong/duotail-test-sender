@@ -1,7 +1,5 @@
 package com.duotail.utils.email.sender;
 
-import io.github.taodong.mail.dkim.DkimMimeMessageHelper;
-import io.github.taodong.mail.dkim.DkimSigningService;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 import org.junit.jupiter.api.Test;
@@ -25,12 +23,6 @@ class EmailSendServiceTest {
 
     @Mock
     private JavaMailSender javaMailSender;
-    @Mock
-    private DkimSignerProperties dkimSignerProperties;
-    @Mock
-    private DkimSigningService dkimSigningService;
-    @Mock
-    private DkimMimeMessageHelper dkimMimeMessageHelper;
 
     @InjectMocks
     private EmailSendService emailSendService;
