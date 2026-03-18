@@ -1,0 +1,16 @@
+from:
+  domains:
+    - "allowed.example.com"
+    - "bad_domain"
+  emails:
+    - "from@example.com"
+    - "bad-email"
+to:
+  domains:
+    - "to.example.com"
+  emails:
+    - "allowed@example.com"
+    - "still-not-an-email"
+batchSize: "invalid"
+
+

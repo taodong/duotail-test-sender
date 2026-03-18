@@ -12,5 +12,4 @@ spring:
             enable: ${mail-smtp-starttls-enable:false}
 
 app:
-  permissions:
-    file: ${permissions-file:permissions.yaml}
+  permissions: ${permissions-file:permissions.yaml}

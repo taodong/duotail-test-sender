@@ -1,0 +1,3 @@
+app:
+  permissions: classpath:test-permissions.yaml
+
