@@ -19,6 +19,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 
@@ -94,8 +96,45 @@ class McpToolServiceTest {
 
         var result = mcpToolService.callTool("send_eml_file_base64", Map.of("emlBase64", base64));
 
-        verify(emailSendService).sendEmailInFile(any(InputStream.class));
+        verify(emailSendService).sendEmailInFile(any(InputStream.class), isNull(), isNull(), isNull(), isNull());
         assertFalse((Boolean) result.get("isError"));
+    }
+
+    @Test
+    void sendEmlToolPassesAddressOverridesToEmailSendService() throws Exception {
+        var base64 = Base64.getEncoder().encodeToString("raw-eml".getBytes(StandardCharsets.UTF_8));
+        var arguments = Map.of(
+                "emlBase64", base64,
+                "from", "Sender <sender@example.com>",
+                "to", List.of("to@example.com"),
+                "cc", List.of("cc@example.com"),
+                "bcc", List.of("bcc@example.com")
+        );
+
+        var result = mcpToolService.callTool("send_eml_file_base64", arguments);
+
+        verify(emailSendService).sendEmailInFile(
+                any(InputStream.class),
+                eq("Sender <sender@example.com>"),
+                eq(List.of("to@example.com")),
+                eq(List.of("cc@example.com")),
+                eq(List.of("bcc@example.com"))
+        );
+        assertFalse((Boolean) result.get("isError"));
+    }
+
+    @Test
+    void sendEmlToolPropagatesPermissionViolation() throws Exception {
+        doThrow(new PermissionException("Sender is not authorized: denied@example.com"))
+                .when(emailSendService)
+                .sendEmailInFile(any(InputStream.class), any(), any(), any(), any());
+
+        var base64 = Base64.getEncoder().encodeToString("raw-eml".getBytes(StandardCharsets.UTF_8));
+
+        PermissionException exception = assertThrows(PermissionException.class,
+                () -> mcpToolService.callTool("send_eml_file_base64", Map.of("emlBase64", base64)));
+
+        assertEquals("Sender is not authorized: denied@example.com", exception.getMessage());
     }
 
     @Test

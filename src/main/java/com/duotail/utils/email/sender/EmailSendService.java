@@ -1,7 +1,9 @@
 package com.duotail.utils.email.sender;
 
 import jakarta.mail.MessagingException;
+import jakarta.mail.Message;
 import jakarta.mail.Session;
+import jakarta.mail.Address;
 import jakarta.mail.internet.AddressException;
 import jakarta.mail.internet.InternetAddress;
 import jakarta.mail.internet.MimeMessage;
@@ -16,8 +18,8 @@ import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 
 import java.io.InputStream;
-import java.io.UnsupportedEncodingException;
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
@@ -66,10 +68,18 @@ public class EmailSendService {
         javaMailSender.send(message);
     }
 
-    public void sendEmailInFile(InputStream emailFile) throws MessagingException, UnsupportedEncodingException {
+    public void sendEmailInFile(InputStream emailFile) throws MessagingException, PermissionException {
+        sendEmailInFile(emailFile, null, null, null, null);
+    }
+
+    public void sendEmailInFile(InputStream emailFile,
+                                String from,
+                                Collection<String> to,
+                                Collection<String> cc,
+                                Collection<String> bcc) throws MessagingException, PermissionException {
         var message = new MimeMessage(Session.getDefaultInstance(properties, null), emailFile);
-        var from = new InternetAddress("1_a_test2.user2_56q@1cxym4dev.info", "Test2 User2");
-        LOG.info("From address signed: {}", from.getAddress());
+        applyAddressOverrides(message, from, to, cc, bcc);
+        validateMimeMessagePermissions(message);
         javaMailSender.send(message);
     }
 
@@ -145,5 +155,71 @@ public class EmailSendService {
 
     private Map<String, String> extraHeaders(EmailRequest emailRequest) {
         return emailRequest.getExtraHeaders() == null ? Map.of() : emailRequest.getExtraHeaders();
+    }
+
+    private void applyAddressOverrides(MimeMessage message,
+                                       String from,
+                                       Collection<String> to,
+                                       Collection<String> cc,
+                                       Collection<String> bcc) throws MessagingException {
+        if (from != null) {
+            message.setFrom(parseSingleAddress(from));
+        }
+        if (to != null) {
+            message.setRecipients(Message.RecipientType.TO, parseAddresses(to));
+        }
+        if (cc != null) {
+            message.setRecipients(Message.RecipientType.CC, parseAddresses(cc));
+        }
+        if (bcc != null) {
+            message.setRecipients(Message.RecipientType.BCC, parseAddresses(bcc));
+        }
+    }
+
+    private void validateMimeMessagePermissions(MimeMessage message) throws MessagingException, PermissionException {
+        validateAddresses(message.getFrom(), senderPermission.from(), "Sender is not authorized: ");
+        validateAddresses(message.getRecipients(Message.RecipientType.TO), senderPermission.to(), "Recipient is not authorized in to: ");
+        validateAddresses(message.getRecipients(Message.RecipientType.CC), senderPermission.to(), "Recipient is not authorized in cc: ");
+        validateAddresses(message.getRecipients(Message.RecipientType.BCC), senderPermission.to(), "Recipient is not authorized in bcc: ");
+    }
+
+    private void validateAddresses(Address[] addresses,
+                                   ContactPermission permission,
+                                   String messagePrefix) throws PermissionException {
+        if (addresses == null) {
+            return;
+        }
+
+        for (Address address : addresses) {
+            validateContact(address.toString(), permission, messagePrefix);
+        }
+    }
+
+    private InternetAddress parseSingleAddress(String value) throws AddressException {
+        InternetAddress[] parsed = InternetAddress.parse(value, true);
+        if (parsed.length == 0) {
+            throw new AddressException("Address value must not be empty", value);
+        }
+        return parsed[0];
+    }
+
+    private Address[] parseAddresses(Collection<String> rawAddresses) throws AddressException {
+        if (CollectionUtils.isEmpty(rawAddresses)) {
+            return null;
+        }
+
+        List<Address> parsedAddresses = new java.util.ArrayList<>();
+        for (String rawAddress : rawAddresses) {
+            if (StringUtils.isBlank(rawAddress)) {
+                continue;
+            }
+            parsedAddresses.addAll(List.of(InternetAddress.parse(rawAddress, true)));
+        }
+
+        if (parsedAddresses.isEmpty()) {
+            return null;
+        }
+
+        return parsedAddresses.toArray(new Address[0]);
     }
 }

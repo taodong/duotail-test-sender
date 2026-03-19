@@ -78,6 +78,11 @@ public class McpToolService {
             throw new IllegalArgumentException("Missing required field: emlBase64");
         }
 
+        String from = objectMapper.convertValue(arguments.get("from"), String.class);
+        List<String> to = toStringList(arguments.get("to"));
+        List<String> cc = toStringList(arguments.get("cc"));
+        List<String> bcc = toStringList(arguments.get("bcc"));
+
         byte[] emlBytes;
         try {
             emlBytes = Base64.getDecoder().decode(emlBase64.getBytes(StandardCharsets.UTF_8));
@@ -86,7 +91,7 @@ public class McpToolService {
         }
 
         try (var stream = new ByteArrayInputStream(emlBytes)) {
-            emailSendService.sendEmailInFile(stream);
+            emailSendService.sendEmailInFile(stream, from, to, cc, bcc);
         }
         return toolTextResult("EML email sent.");
     }
@@ -130,9 +135,20 @@ public class McpToolService {
                 "type", "object",
                 "required", List.of("emlBase64"),
                 "properties", Map.of(
-                        "emlBase64", Map.of("type", "string", "description", "Raw .eml content encoded in base64")
+                        "emlBase64", Map.of("type", "string", "description", "Raw .eml content encoded in base64"),
+                        "from", Map.of("type", "string"),
+                        "to", Map.of("type", "array", "items", Map.of("type", "string")),
+                        "cc", Map.of("type", "array", "items", Map.of("type", "string")),
+                        "bcc", Map.of("type", "array", "items", Map.of("type", "string"))
                 )
         );
+    }
+
+    private List<String> toStringList(Object value) {
+        if (value == null) {
+            return null;
+        }
+        return objectMapper.convertValue(value, new TypeReference<List<String>>() {});
     }
 }
 

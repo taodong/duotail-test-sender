@@ -3,17 +3,22 @@ package com.duotail.utils.email.sender;
 import com.duotail.utils.email.sender.permission.ContactPermission;
 import com.duotail.utils.email.sender.permission.PermissionException;
 import com.duotail.utils.email.sender.permission.SenderPermission;
+import jakarta.mail.Message;
 import jakarta.mail.MessagingException;
+import jakarta.mail.internet.InternetAddress;
 import jakarta.mail.internet.MimeMessage;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.MockedConstruction;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 
+import java.io.ByteArrayInputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Set;
 
@@ -142,6 +147,88 @@ class EmailSendServiceTest {
                 )));
 
         assertEquals("Recipient is not authorized in to: blocked@blocked.com", exception.getMessage());
+        verifyNoInteractions(javaMailSender);
+    }
+
+    @Test
+    void sendEmailInFileAppliesOverridesBeforeSending() throws Exception {
+        var eml = "From: original@example.com\r\n"
+                + "To: old-to@example.com\r\n"
+                + "Cc: old-cc@example.com\r\n"
+                + "Subject: Override test\r\n"
+                + "\r\n"
+                + "Body";
+
+        emailSendService.sendEmailInFile(
+                new ByteArrayInputStream(eml.getBytes(StandardCharsets.UTF_8)),
+                "New Sender <sender@allowed.com>",
+                List.of("to1@allowed.com", "to2@allowed.com"),
+                List.of("cc@allowed.com"),
+                List.of("bcc@allowed.com")
+        );
+
+        ArgumentCaptor<MimeMessage> messageCaptor = ArgumentCaptor.forClass(MimeMessage.class);
+        verify(javaMailSender).send(messageCaptor.capture());
+        MimeMessage sentMessage = messageCaptor.getValue();
+
+        InternetAddress from = (InternetAddress) sentMessage.getFrom()[0];
+        assertEquals("sender@allowed.com", from.getAddress());
+        assertEquals(2, sentMessage.getRecipients(Message.RecipientType.TO).length);
+        assertEquals(1, sentMessage.getRecipients(Message.RecipientType.CC).length);
+        assertEquals(1, sentMessage.getRecipients(Message.RecipientType.BCC).length);
+    }
+
+    @Test
+    void sendEmailInFileThrowsWhenEmlRecipientIsNotAuthorized() {
+        emailSendService = new EmailSendService(
+                javaMailSender,
+                new SenderPermission(
+                        new ContactPermission(true, List.of(), List.of()),
+                        new ContactPermission(false, List.of("allowed.com"), List.of()),
+                        10
+                )
+        );
+
+        var eml = "From: sender@example.com\r\n"
+                + "To: blocked@blocked.com\r\n"
+                + "Subject: Permission test\r\n"
+                + "\r\n"
+                + "Body";
+
+        PermissionException exception = assertThrows(PermissionException.class,
+                () -> emailSendService.sendEmailInFile(new ByteArrayInputStream(eml.getBytes(StandardCharsets.UTF_8))));
+
+        assertEquals("Recipient is not authorized in to: blocked@blocked.com", exception.getMessage());
+        verifyNoInteractions(javaMailSender);
+    }
+
+    @Test
+    void sendEmailInFileThrowsWhenOverrideSenderIsNotAuthorized() {
+        emailSendService = new EmailSendService(
+                javaMailSender,
+                new SenderPermission(
+                        new ContactPermission(false, List.of("allowed.com"), List.of()),
+                        new ContactPermission(true, List.of(), List.of()),
+                        10
+                )
+        );
+
+        var eml = "From: sender@allowed.com\r\n"
+                + "To: receiver@example.com\r\n"
+                + "Subject: Permission test\r\n"
+                + "\r\n"
+                + "Body";
+
+        PermissionException exception = assertThrows(PermissionException.class,
+                () -> emailSendService.sendEmailInFile(
+                        new ByteArrayInputStream(eml.getBytes(StandardCharsets.UTF_8)),
+                        "Denied Sender <sender@blocked.com>",
+                        null,
+                        null,
+                        null
+                ));
+
+        assertEquals("Sender is not authorized: Denied Sender <sender@blocked.com>", exception.getMessage());
         verifyNoInteractions(javaMailSender);
     }
 
