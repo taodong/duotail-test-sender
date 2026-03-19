@@ -57,7 +57,7 @@ public class SenderPermissionProcessor {
 
     private ContactPermission parseContactPermission(Object policyValue, String fieldName) {
         if (!(policyValue instanceof Map<?, ?> policyMap)) {
-            return new ContactPermission(false, List.of(), false, List.of());
+            return new ContactPermission(false, List.of(), List.of());
         }
 
         List<String> domains = toStringList(policyMap.get("domains"));
@@ -67,12 +67,9 @@ public class SenderPermissionProcessor {
                 : filterValidEntries(domains, this::isValidDomain, fieldName + ".domains");
 
         List<String> emails = toStringList(policyMap.get("emails"));
-        boolean allowAllEmails = emails.contains("*");
-        List<String> allowedEmails = allowAllEmails
-                ? List.of()
-                : filterValidEntries(emails, this::isValidEmail, fieldName + ".emails");
+        List<String> allowedEmails = filterValidEntries(emails, this::isValidEmail, fieldName + ".emails");
 
-        return new ContactPermission(allowAllDomains, allowedDomains, allowAllEmails, allowedEmails);
+        return new ContactPermission(allowAllDomains, allowedDomains, allowedEmails);
     }
 
     private int parseBatchSize(Object batchSizeValue) {

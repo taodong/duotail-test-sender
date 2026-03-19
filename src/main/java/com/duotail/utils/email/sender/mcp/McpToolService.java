@@ -2,6 +2,7 @@ package com.duotail.utils.email.sender.mcp;
 
 import com.duotail.utils.email.sender.EmailRequest;
 import com.duotail.utils.email.sender.EmailSendService;
+import com.duotail.utils.email.sender.permission.PermissionException;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 import tools.jackson.core.type.TypeReference;
@@ -60,7 +61,7 @@ public class McpToolService {
         return toolTextResult("Email sent.");
     }
 
-    private Map<String, Object> sendBatch(Map<String, Object> arguments) {
+    private Map<String, Object> sendBatch(Map<String, Object> arguments) throws PermissionException {
         var emailsRaw = arguments.get("emails");
         if (emailsRaw == null) {
             throw new IllegalArgumentException("Missing required field: emails");

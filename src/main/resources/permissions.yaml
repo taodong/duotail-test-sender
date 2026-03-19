@@ -1,11 +1,7 @@
 from:
   domains:
     - "*"
-  emails:
-    - "*"
 to:
   domains:
-    - "*"
-  emails:
     - "*"
 batchSize: 10000

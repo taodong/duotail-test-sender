@@ -1,5 +1,6 @@
 package com.duotail.utils.email.sender.mcp;
 
+import com.duotail.utils.email.sender.permission.PermissionException;
 import org.apache.commons.lang3.Strings;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -10,6 +11,7 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -43,6 +45,8 @@ public class McpController {
                 case "tools/call" -> handleToolsCall(request);
                 default -> rpcError(request.id(), -32601, "Method not found: " + request.method());
             };
+        } catch (PermissionException ex) {
+            return toolErrorResult(request.id(), ex.getMessage());
         } catch (IllegalArgumentException ex) {
             return rpcError(request.id(), -32602, ex.getMessage());
         } catch (Exception ex) {
@@ -63,6 +67,13 @@ public class McpController {
         response.put("id", objectMapper.convertValue(id, Object.class));
         response.put("result", result);
         return response;
+    }
+
+    private Map<String, Object> toolErrorResult(JsonNode id, String message) {
+        return rpcResult(id, Map.of(
+                "content", List.of(Map.of("type", "text", "text", message)),
+                "isError", true
+        ));
     }
 
     private Map<String, Object> rpcError(JsonNode id, int code, String message) {

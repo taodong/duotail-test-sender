@@ -1,11 +1,13 @@
 package com.duotail.utils.email.sender.mcp;
 
+import com.duotail.utils.email.sender.permission.PermissionException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import java.util.Map;
 import tools.jackson.databind.ObjectMapper;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -59,6 +61,23 @@ class McpControllerTest {
         @SuppressWarnings("unchecked") Map<String, Object> error = (Map<String, Object>) response.get("error");
         assertEquals(-32602, error.get("code"));
         assertEquals("Unknown tool: unknown", error.get("message"));
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void permissionViolationReturnsMcpToolErrorResult() throws Exception {
+        when(mcpToolService.callTool("send_email", Map.of()))
+                .thenThrow(new PermissionException("Sender is not authorized: denied@example.com"));
+
+        var params = new ObjectMapper().valueToTree(Map.of("name", "send_email", "arguments", Map.of()));
+        var request = new McpController.McpRequest("2.0", null, "tools/call", params);
+
+        var response = mcpController.handle(request);
+
+        Map<String, Object> result = (Map<String, Object>) response.get("result");
+        assertTrue((Boolean) result.get("isError"));
+        var content = (java.util.List<Map<String, Object>>) result.get("content");
+        assertEquals("Sender is not authorized: denied@example.com", content.getFirst().get("text"));
     }
 }
 

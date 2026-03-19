@@ -1,5 +1,6 @@
 package com.duotail.utils.email.sender;
 
+import com.duotail.utils.email.sender.permission.PermissionException;
 import jakarta.mail.MessagingException;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -17,7 +18,7 @@ public class EmailSendController {
     }
 
     @PostMapping
-    public void sendEmail(@Valid @RequestBody EmailRequest emailRequest) throws MessagingException {
+    public void sendEmail(@Valid @RequestBody EmailRequest emailRequest) throws MessagingException, PermissionException {
         emailSendService.sendEmail(emailRequest);
     }
 }

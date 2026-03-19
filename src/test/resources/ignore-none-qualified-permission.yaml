@@ -1,0 +1,14 @@
+from:
+  domains:
+    - "*"
+    - "good_domain.com"
+  emails:
+    - "allowed@example.com"
+    - "*"
+to:
+  domains:
+    - "to.example.com"
+  emails:
+    - "allowed@example.com"
+    - "still-not-an-email"
+batchSize: 100

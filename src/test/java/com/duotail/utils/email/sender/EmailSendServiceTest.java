@@ -1,21 +1,28 @@
 package com.duotail.utils.email.sender;
 
+import com.duotail.utils.email.sender.permission.ContactPermission;
+import com.duotail.utils.email.sender.permission.PermissionException;
+import com.duotail.utils.email.sender.permission.SenderPermission;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockedConstruction;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 
+import java.util.List;
 import java.util.Set;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mockConstruction;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 @SuppressWarnings("unused")
 @ExtendWith(MockitoExtension.class)
@@ -24,18 +31,27 @@ class EmailSendServiceTest {
     @Mock
     private JavaMailSender javaMailSender;
 
-    @InjectMocks
     private EmailSendService emailSendService;
 
+    @BeforeEach
+    void setUp() {
+        emailSendService = new EmailSendService(javaMailSender, allowAllPermission());
+    }
+
     @Test
-    void sendEmail() throws MessagingException {
-        var emailRequest = new EmailRequest();
-        emailRequest.setFrom("fn ln <fn.ln@whatever.com>");
-        emailRequest.setTo(Set.of("abc <fsf@abc.com>", "ppp@ppp.con"));
+    void sendEmailAllowsFormattedAddressesWhenPermissionsMatch() throws MessagingException, PermissionException {
+        emailSendService = new EmailSendService(
+                javaMailSender,
+                new SenderPermission(
+                        new ContactPermission(false, List.of("whatever.com"), List.of()),
+                        new ContactPermission(false, List.of("abc.com", "ppp.con", "fidsf.com", "bfds.com"), List.of()),
+                        10
+                )
+        );
+
+        var emailRequest = emailRequest("fn ln <fn.ln@whatever.com>", Set.of("abc <fsf@abc.com>", "ppp@ppp.con"));
         emailRequest.setCc(Set.of("ffw@fidsf.com"));
         emailRequest.setBcc(Set.of("bcc1@bfds.com"));
-        emailRequest.setSubject("subject");
-        emailRequest.setContent("content");
 
         try(MockedConstruction<MimeMessageHelper> mocked = mockConstruction(MimeMessageHelper.class)) {
             emailSendService.sendEmail(emailRequest);
@@ -49,5 +65,100 @@ class EmailSendServiceTest {
             verify(javaMailSender).send(any(MimeMessage.class));
         }
 
+    }
+
+    @Test
+    void sendEmailThrowsWhenSenderIsNotAuthorized() {
+        emailSendService = new EmailSendService(
+                javaMailSender,
+                new SenderPermission(
+                        new ContactPermission(false, List.of("allowed.com"), List.of()),
+                        new ContactPermission(true, List.of(), List.of()),
+                        10
+                )
+        );
+
+        PermissionException exception = assertThrows(PermissionException.class,
+                () -> emailSendService.sendEmail(emailRequest("Sender <denied@example.com>", Set.of("receiver@example.com"))));
+
+        assertEquals("Sender is not authorized: Sender <denied@example.com>", exception.getMessage());
+        verifyNoInteractions(javaMailSender);
+    }
+
+    @Test
+    void sendEmailThrowsWhenRecipientIsNotAuthorized() {
+        emailSendService = new EmailSendService(
+                javaMailSender,
+                new SenderPermission(
+                        new ContactPermission(true, List.of(), List.of()),
+                        new ContactPermission(false, List.of("allowed.com"), List.of()),
+                        10
+                )
+        );
+
+        var emailRequest = emailRequest("sender@example.com", Set.of("allowed@allowed.com"));
+        emailRequest.setCc(Set.of("blocked@blocked.com"));
+
+        PermissionException exception = assertThrows(PermissionException.class,
+                () -> emailSendService.sendEmail(emailRequest));
+
+        assertEquals("Recipient is not authorized in cc: blocked@blocked.com", exception.getMessage());
+        verifyNoInteractions(javaMailSender);
+    }
+
+    @Test
+    void sendEmailsThrowsWhenBatchSizeExceedsAllowedLimit() {
+        emailSendService = new EmailSendService(javaMailSender, new SenderPermission(
+                new ContactPermission(true, List.of(), List.of()),
+                new ContactPermission(true, List.of(), List.of()),
+                1
+        ));
+
+        PermissionException exception = assertThrows(PermissionException.class,
+                () -> emailSendService.sendEmails(List.of(
+                        emailRequest("sender1@example.com", Set.of("receiver1@example.com")),
+                        emailRequest("sender2@example.com", Set.of("receiver2@example.com"))
+                )));
+
+        assertEquals("Batch size 2 exceeds allowed limit of 1 emails.", exception.getMessage());
+        verifyNoInteractions(javaMailSender);
+    }
+
+    @Test
+    void sendEmailsValidatesAllPermissionsBeforeSendingBatch() {
+        emailSendService = new EmailSendService(
+                javaMailSender,
+                new SenderPermission(
+                        new ContactPermission(true, List.of(), List.of()),
+                        new ContactPermission(false, List.of("allowed.com"), List.of()),
+                        10
+                )
+        );
+
+        PermissionException exception = assertThrows(PermissionException.class,
+                () -> emailSendService.sendEmails(List.of(
+                        emailRequest("sender@example.com", Set.of("allowed@allowed.com")),
+                        emailRequest("sender@example.com", Set.of("blocked@blocked.com"))
+                )));
+
+        assertEquals("Recipient is not authorized in to: blocked@blocked.com", exception.getMessage());
+        verifyNoInteractions(javaMailSender);
+    }
+
+    private EmailRequest emailRequest(String from, Set<String> to) {
+        var emailRequest = new EmailRequest();
+        emailRequest.setFrom(from);
+        emailRequest.setTo(to);
+        emailRequest.setSubject("subject");
+        emailRequest.setContent("content");
+        return emailRequest;
+    }
+
+    private SenderPermission allowAllPermission() {
+        return new SenderPermission(
+                new ContactPermission(true, List.of(), List.of()),
+                new ContactPermission(true, List.of(), List.of()),
+                100
+        );
     }
 }

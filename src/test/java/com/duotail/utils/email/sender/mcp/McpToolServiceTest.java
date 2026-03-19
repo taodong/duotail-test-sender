@@ -1,6 +1,7 @@
 package com.duotail.utils.email.sender.mcp;
 
 import com.duotail.utils.email.sender.EmailSendService;
+import com.duotail.utils.email.sender.permission.PermissionException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -15,8 +16,10 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
@@ -62,6 +65,27 @@ class McpToolServiceTest {
 
         verify(emailSendService).sendEmails(any());
         assertFalse((Boolean) result.get("isError"));
+    }
+
+    @Test
+    void sendBatchToolPropagatesPermissionViolation() throws Exception {
+        doThrow(new PermissionException("Batch size 2 exceeds allowed limit of 1 emails."))
+                .when(emailSendService)
+                .sendEmails(any());
+
+        var arguments = Map.<String, Object>of(
+                "emails", List.of(Map.of(
+                        "from", "sender@example.com",
+                        "to", List.of("receiver@example.com"),
+                        "subject", "Batch",
+                        "content", "<p>Hello</p>"
+                ))
+        );
+
+        PermissionException exception = assertThrows(PermissionException.class,
+                () -> mcpToolService.callTool("send_batch_emails", arguments));
+
+        assertEquals("Batch size 2 exceeds allowed limit of 1 emails.", exception.getMessage());
     }
 
     @Test
