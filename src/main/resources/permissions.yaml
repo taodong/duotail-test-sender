@@ -1,7 +1,7 @@
 from:
-  domains:
-    - "*"
+  emails:
+    - "from@example.com"
 to:
-  domains:
-    - "*"
-batchSize: 10000
+  emails:
+    - "to@example.com"
+batchSize: 10

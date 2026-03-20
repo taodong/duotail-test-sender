@@ -1,6 +1,6 @@
 spring:
   application:
-    name: email-sender
+    name: duotail-test-email-sender
   mail:
     host: ${mail-host:localhost}
     port: ${mail-port:25}
@@ -13,3 +13,7 @@ spring:
 
 app:
   permissions: ${permissions-file:classpath:permissions.yaml}
+
+logging:
+  file:
+    path: ${LOG_DIR:.}
