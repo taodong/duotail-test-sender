@@ -1,21 +1,21 @@
 package com.duotail.utils.email.sender.mcp;
 
+import com.duotail.utils.email.sender.EmailRequest;
 import com.duotail.utils.email.sender.EmailSendService;
 import com.duotail.utils.email.sender.permission.PermissionException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import tools.jackson.databind.ObjectMapper;
 
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.List;
-import java.util.Map;
+import java.util.Set;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
@@ -23,9 +23,12 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 @ExtendWith(MockitoExtension.class)
 class McpToolServiceTest {
+
+    private static final String RAW_EML = "From: sender@example.com\r\nTo: receiver@example.com\r\nSubject: Test\r\n\r\nBody";
 
     @Mock
     private EmailSendService emailSendService;
@@ -34,84 +37,83 @@ class McpToolServiceTest {
 
     @BeforeEach
     void setUp() {
-        mcpToolService = new McpToolService(emailSendService, new ObjectMapper());
+        mcpToolService = new McpToolService(emailSendService);
     }
 
     @Test
-    void sendEmailToolDispatchesToEmailSendService() throws Exception {
-        var arguments = Map.<String, Object>of(
-                "from", "sender@example.com",
-                "to", List.of("receiver@example.com"),
-                "subject", "Test",
-                "content", "<p>Hello</p>"
-        );
+    void sendEmailDelegatesToEmailSendService() throws Exception {
+        var request = emailRequest();
 
-        var result = mcpToolService.callTool("send_email", arguments);
+        var result = mcpToolService.sendEmail(request);
 
-        verify(emailSendService).sendEmail(any());
-        assertFalse((Boolean) result.get("isError"));
+        verify(emailSendService).sendEmail(request);
+        assertEquals("Email sent successfully.", result);
     }
 
     @Test
-    void sendBatchToolDispatchesToEmailSendService() throws Exception {
-        var arguments = Map.<String, Object>of(
-                "emails", List.of(Map.of(
-                        "from", "sender@example.com",
-                        "to", List.of("receiver@example.com"),
-                        "subject", "Batch",
-                        "content", "<p>Hello</p>"
-                ))
-        );
+    void sendEmailPropagatesPermissionViolation() throws Exception {
+        var request = emailRequest();
 
-        var result = mcpToolService.callTool("send_batch_emails", arguments);
-
-        verify(emailSendService).sendEmails(any());
-        assertFalse((Boolean) result.get("isError"));
-    }
-
-    @Test
-    void sendBatchToolPropagatesPermissionViolation() throws Exception {
-        doThrow(new PermissionException("Batch size 2 exceeds allowed limit of 1 emails."))
+        doThrow(new PermissionException("Sender is not authorized: denied@example.com"))
                 .when(emailSendService)
-                .sendEmails(any());
-
-        var arguments = Map.<String, Object>of(
-                "emails", List.of(Map.of(
-                        "from", "sender@example.com",
-                        "to", List.of("receiver@example.com"),
-                        "subject", "Batch",
-                        "content", "<p>Hello</p>"
-                ))
-        );
+                .sendEmail(request);
 
         PermissionException exception = assertThrows(PermissionException.class,
-                () -> mcpToolService.callTool("send_batch_emails", arguments));
+                () -> mcpToolService.sendEmail(request));
+
+        assertEquals("Sender is not authorized: denied@example.com", exception.getMessage());
+    }
+
+    @Test
+    void sendBatchEmailsDelegatesToEmailSendService() throws Exception {
+        var emails = List.of(emailRequest(), emailRequest("batch-sender@example.com", Set.of("batch-recipient@example.com")));
+
+        var result = mcpToolService.sendBatchEmails(emails);
+
+        verify(emailSendService).sendEmails(emails);
+        assertEquals("Batch send triggered for 2 emails.", result);
+    }
+
+    @Test
+    void sendBatchEmailsPropagatesPermissionViolation() throws Exception {
+        var emails = List.of(
+                emailRequest(),
+                emailRequest("batch-sender@example.com", Set.of("batch-recipient@example.com"))
+        );
+
+        doThrow(new PermissionException("Batch size 2 exceeds allowed limit of 1 emails."))
+                .when(emailSendService)
+                .sendEmails(emails);
+
+        PermissionException exception = assertThrows(PermissionException.class,
+                () -> mcpToolService.sendBatchEmails(emails));
 
         assertEquals("Batch size 2 exceeds allowed limit of 1 emails.", exception.getMessage());
     }
 
     @Test
-    void sendEmlToolDispatchesToEmailSendService() throws Exception {
-        var base64 = Base64.getEncoder().encodeToString("raw-eml".getBytes(StandardCharsets.UTF_8));
+    void sendEmlFileBase64DelegatesDecodedPayloadToEmailSendService() throws Exception {
+        var base64 = base64Eml(RAW_EML);
 
-        var result = mcpToolService.callTool("send_eml_file_base64", Map.of("emlBase64", base64));
+        var result = mcpToolService.sendEmlFileBase64(base64, null, null, null, null);
 
-        verify(emailSendService).sendEmailInFile(any(InputStream.class), isNull(), isNull(), isNull(), isNull());
-        assertFalse((Boolean) result.get("isError"));
+        ArgumentCaptor<InputStream> inputStreamCaptor = ArgumentCaptor.forClass(InputStream.class);
+        verify(emailSendService).sendEmailInFile(inputStreamCaptor.capture(), isNull(), isNull(), isNull(), isNull());
+        assertEquals(RAW_EML, new String(inputStreamCaptor.getValue().readAllBytes(), StandardCharsets.UTF_8));
+        assertEquals("EML email sent successfully.", result);
     }
 
     @Test
-    void sendEmlToolPassesAddressOverridesToEmailSendService() throws Exception {
-        var base64 = Base64.getEncoder().encodeToString("raw-eml".getBytes(StandardCharsets.UTF_8));
-        var arguments = Map.of(
-                "emlBase64", base64,
-                "from", "Sender <sender@example.com>",
-                "to", List.of("to@example.com"),
-                "cc", List.of("cc@example.com"),
-                "bcc", List.of("bcc@example.com")
-        );
+    void sendEmlFileBase64PassesAddressOverridesToEmailSendService() throws Exception {
+        var base64 = base64Eml(RAW_EML);
 
-        var result = mcpToolService.callTool("send_eml_file_base64", arguments);
+        var result = mcpToolService.sendEmlFileBase64(
+                base64,
+                "Sender <sender@example.com>",
+                List.of("to@example.com"),
+                List.of("cc@example.com"),
+                List.of("bcc@example.com")
+        );
 
         verify(emailSendService).sendEmailInFile(
                 any(InputStream.class),
@@ -120,27 +122,46 @@ class McpToolServiceTest {
                 eq(List.of("cc@example.com")),
                 eq(List.of("bcc@example.com"))
         );
-        assertFalse((Boolean) result.get("isError"));
+        assertEquals("EML email sent successfully.", result);
     }
 
     @Test
-    void sendEmlToolPropagatesPermissionViolation() throws Exception {
+    void sendEmlFileBase64PropagatesPermissionViolation() throws Exception {
+        var base64 = base64Eml(RAW_EML);
+
         doThrow(new PermissionException("Sender is not authorized: denied@example.com"))
                 .when(emailSendService)
                 .sendEmailInFile(any(InputStream.class), any(), any(), any(), any());
 
-        var base64 = Base64.getEncoder().encodeToString("raw-eml".getBytes(StandardCharsets.UTF_8));
-
         PermissionException exception = assertThrows(PermissionException.class,
-                () -> mcpToolService.callTool("send_eml_file_base64", Map.of("emlBase64", base64)));
+                () -> mcpToolService.sendEmlFileBase64(base64, null, null, null, null));
 
         assertEquals("Sender is not authorized: denied@example.com", exception.getMessage());
     }
 
     @Test
-    void unknownToolThrowsValidationError() {
-        assertThrows(IllegalArgumentException.class, () -> mcpToolService.callTool("unknown", Map.of()));
+    void sendEmlFileBase64RejectsInvalidBase64WithoutCallingEmailSendService() {
+        assertThrows(IllegalArgumentException.class,
+                () -> mcpToolService.sendEmlFileBase64("not-base64", null, null, null, null));
+
+        verifyNoInteractions(emailSendService);
+    }
+
+    private EmailRequest emailRequest() {
+        return emailRequest("sender@example.com", Set.of("receiver@example.com"));
+    }
+
+    private EmailRequest emailRequest(String from, Set<String> to) {
+        var request = new EmailRequest();
+        request.setFrom(from);
+        request.setTo(to);
+        request.setSubject("Test");
+        request.setContent("<p>Hello</p>");
+        return request;
+    }
+
+    @SuppressWarnings("SameParameterValue")
+    private String base64Eml(String rawEml) {
+        return Base64.getEncoder().encodeToString(rawEml.getBytes(StandardCharsets.UTF_8));
     }
 }
-
-

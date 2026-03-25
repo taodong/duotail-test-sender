@@ -1,10 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration scan="true" scanPeriod="30 seconds">
 
-  <!-- Use property LOG_DIR if provided, otherwise fall back to Spring property logging.file.path -->
-  <property name="LOG_DIR" value="${LOG_DIR:-${logging.file.path:-/var/log/duotail-test-email-sender}}" />
-
-  <springProperty scope="context" name="APP_NAME" source="spring.application.name"/>
+  <springProperty scope="context" name="LOG_DIR" source="logging.file.path" defaultValue="."/>
 
   <!-- Console appender -->
   <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
@@ -16,13 +13,11 @@
   <!-- Rolling file appender -->
   <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
     <file>${LOG_DIR}/app.log</file>
-    <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+    <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
       <!-- daily rollover, keep 30 days -->
       <fileNamePattern>${LOG_DIR}/app-%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
-      <timeBasedFileNamingAndTriggeringPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP">
-        <!-- roll when > 10MB within the day -->
-        <maxFileSize>10MB</maxFileSize>
-      </timeBasedFileNamingAndTriggeringPolicy>
+      <!-- roll when > 10MB within the day -->
+      <maxFileSize>10MB</maxFileSize>
       <maxHistory>30</maxHistory>
       <totalSizeCap>2GB</totalSizeCap>
     </rollingPolicy>

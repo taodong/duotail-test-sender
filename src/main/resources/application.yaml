@@ -10,6 +10,17 @@ spring:
           auth: ${mail-smtp-auth:false}
           starttls:
             enable: ${mail-smtp-starttls-enable:false}
+  ai:
+    mcp:
+      server:
+        protocol: STREAMABLE
+        name: duotail-test-email-mcp
+        version: 1.0.0
+        streamable-http:
+          mcp-endpoint: /mcp
+        annotation-scanner:
+          enabled: true
+
 
 app:
   permissions: ${permissions-file:classpath:permissions.yaml}

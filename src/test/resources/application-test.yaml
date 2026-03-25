@@ -1,3 +1,7 @@
 app:
   permissions: classpath:test-permissions.yaml
 
+logging:
+  file:
+    path: target/test-logs
+
