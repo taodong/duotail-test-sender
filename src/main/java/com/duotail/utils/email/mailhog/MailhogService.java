@@ -26,12 +26,15 @@ public class MailhogService {
         textJsonConverter.setSupportedMediaTypes(List.of(MediaType.valueOf("text/json")));
         this.restClient = restClientBuilder
                 .baseUrl(mailhogUrl)
-                .messageConverters(converters -> converters.add(textJsonConverter))
+                .configureMessageConverters(converters -> converters
+                        .registerDefaults()
+                        .addCustomConverter(textJsonConverter))
                 .build();
     }
 
     public MailhogPageResponse getMessages(int start, int limit) {
         try {
+            LOG.info("Fetching messages from MailHog with start={}, limit={}", start, limit);
             return restClient.get()
                     .uri("/api/v2/messages?start={start}&limit={limit}", start, limit)
                     .retrieve()
@@ -45,6 +48,7 @@ public class MailhogService {
 
     public MailhogPageResponse search(String kind, String query, int start, int limit) {
         try {
+            LOG.info("Searching MailHog with kind='{}', query='{}', start={}, limit={}", kind, query, start, limit);
             return restClient.get()
                     .uri("/api/v2/search?kind={kind}&query={query}&start={start}&limit={limit}",
                             kind, query, start, limit)

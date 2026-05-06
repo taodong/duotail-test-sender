@@ -64,7 +64,8 @@ public class EmailSendService {
         for (var entry : extraHeaders(emailRequest).entrySet()) {
             message.addHeader(entry.getKey(), entry.getValue());
         }
-
+        LOG.info("Sending email [from: {} | to: {} | subject: '{}' ]", emailRequest.getFrom(),
+                String.join(",", emailRequest.getTo()), emailRequest.getSubject());
         javaMailSender.send(message);
     }
 
@@ -80,6 +81,7 @@ public class EmailSendService {
         var message = new MimeMessage(Session.getDefaultInstance(properties, null), emailFile);
         applyAddressOverrides(message, from, to, cc, bcc);
         validateMimeMessagePermissions(message);
+        LOG.info("Sending email [from: {} | to: {} | subject: '{}' ] from file input stream", from, String.join(",", to), message.getSubject());
         javaMailSender.send(message);
     }
 

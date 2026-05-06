@@ -57,6 +57,20 @@ class MailhogServiceTest {
     }
 
     @Test
+    void getMessagesMapsTextJsonResponse() {
+        mockServer.expect(requestTo(BASE_URL + "/api/v2/messages?start=0&limit=1"))
+                .andExpect(method(HttpMethod.GET))
+                .andRespond(withSuccess(pageJson("Text Json Subject", "sender", "example.com", "recipient", "example.com"),
+                        MediaType.valueOf("text/json")));
+
+        var result = service.getMessages(0, 1);
+
+        assertEquals(1, result.total());
+        assertEquals("Text Json Subject", result.items().getFirst().content().headers().get("Subject").getFirst());
+        mockServer.verify();
+    }
+
+    @Test
     void getMessagesThrowsMailhogUnavailableExceptionOnError() {
         mockServer.expect(requestTo(BASE_URL + "/api/v2/messages?start=0&limit=50"))
                 .andRespond(withResourceNotFound());
