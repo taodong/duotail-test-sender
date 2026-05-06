@@ -3,9 +3,13 @@ package com.duotail.utils.email.mailhog;
 import com.duotail.utils.email.mailhog.dto.MailhogPageResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.MediaType;
+import org.springframework.http.converter.json.JacksonJsonHttpMessageConverter;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+
+import java.util.List;
 
 @Slf4j
 @Service
@@ -17,7 +21,13 @@ public class MailhogService {
     public MailhogService(RestClient.Builder restClientBuilder,
                           @Value("${app.mailhog.url}") String mailhogUrl) {
         this.mailhogUrl = mailhogUrl;
-        this.restClient = restClientBuilder.baseUrl(mailhogUrl).build();
+        // MailHog returns Content-Type: text/json, which Jackson doesn't handle by default
+        var textJsonConverter = new JacksonJsonHttpMessageConverter();
+        textJsonConverter.setSupportedMediaTypes(List.of(MediaType.valueOf("text/json")));
+        this.restClient = restClientBuilder
+                .baseUrl(mailhogUrl)
+                .messageConverters(converters -> converters.add(textJsonConverter))
+                .build();
     }
 
     public MailhogPageResponse getMessages(int start, int limit) {
