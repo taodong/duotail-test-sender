@@ -78,7 +78,7 @@
 	</dependencies>
 
 	<build>
-		<finalName>duotail-test-email-utils</finalName>
+		<finalName>duotail-test-email-utils-${version}</finalName>
 		<plugins>
 			<plugin>
 				<groupId>org.springframework.boot</groupId>
