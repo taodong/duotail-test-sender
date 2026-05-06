@@ -1,7 +1,0 @@
-from:
-  emails:
-    - "from@example.com"
-to:
-  emails:
-    - "to@example.com"
-batchSize: 10
