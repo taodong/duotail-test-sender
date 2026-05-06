@@ -91,13 +91,3 @@ curl -s http://localhost:8080/mcp \
   -H 'Content-Type: application/json' \
   -d "{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"tools/call\",\"params\":{\"name\":\"send_eml_file_base64\",\"arguments\":{\"emlBase64\":\"${EML_BASE64}\"}}}"
 ```
-
-
-## Java / Spring Boot Upgrade
-Upgrade through OpenRewrite
-
-```shell
-mvn rewrite:run
-```
-
-- SpringBoot 4 upgrade: https://docs.openrewrite.org/recipes/java/spring/boot4/upgradespringboot_4_0-community-edition
