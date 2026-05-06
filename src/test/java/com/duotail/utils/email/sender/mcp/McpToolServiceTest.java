@@ -1,5 +1,11 @@
 package com.duotail.utils.email.sender.mcp;
 
+import com.duotail.utils.email.mailhog.MailhogService;
+import com.duotail.utils.email.mailhog.MailhogUnavailableException;
+import com.duotail.utils.email.mailhog.dto.MailhogContent;
+import com.duotail.utils.email.mailhog.dto.MailhogMessage;
+import com.duotail.utils.email.mailhog.dto.MailhogPageResponse;
+import com.duotail.utils.email.mailhog.dto.MailhogPath;
 import com.duotail.utils.email.sender.EmailRequest;
 import com.duotail.utils.email.sender.EmailSendService;
 import com.duotail.utils.email.sender.permission.PermissionException;
@@ -14,16 +20,12 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.isNull;
-import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class McpToolServiceTest {
@@ -33,11 +35,14 @@ class McpToolServiceTest {
     @Mock
     private EmailSendService emailSendService;
 
+    @Mock
+    private MailhogService mailhogService;
+
     private McpToolService mcpToolService;
 
     @BeforeEach
     void setUp() {
-        mcpToolService = new McpToolService(emailSendService);
+        mcpToolService = new McpToolService(emailSendService, mailhogService);
     }
 
     @Test
@@ -145,6 +150,85 @@ class McpToolServiceTest {
                 () -> mcpToolService.sendEmlFileBase64("not-base64", null, null, null, null));
 
         verifyNoInteractions(emailSendService);
+    }
+
+    // --- MailHog MCP tools ---
+
+    @Test
+    void listMailhogMessagesDelegatesToServiceAndFormatsResponse() {
+        when(mailhogService.getMessages(0, 50)).thenReturn(pageResponse());
+
+        var result = mcpToolService.listMailhogMessages(0, 50);
+
+        assertTrue(result.contains("Found 1 message(s)"));
+        assertTrue(result.contains("Subject: Hello World"));
+        assertTrue(result.contains("From: sender@example.com"));
+        assertTrue(result.contains("To: recipient@example.com"));
+        assertTrue(result.contains("Created: 2025-01-01T10:00:00Z"));
+        verify(mailhogService).getMessages(0, 50);
+    }
+
+    @Test
+    void listMailhogMessagesUsesNoSubjectFallbackWhenHeaderAbsent() {
+        var msg = new MailhogMessage("id1",
+                new MailhogPath("sender", "example.com"),
+                List.of(new MailhogPath("recipient", "example.com")),
+                new MailhogContent(Map.of(), 0),
+                "2025-01-01T10:00:00Z");
+        when(mailhogService.getMessages(0, 50)).thenReturn(new MailhogPageResponse(1, 1, 0, List.of(msg)));
+
+        var result = mcpToolService.listMailhogMessages(0, 50);
+
+        assertTrue(result.contains("Subject: (no subject)"));
+    }
+
+    @Test
+    void listMailhogMessagesShowsNoMessagesWhenEmpty() {
+        when(mailhogService.getMessages(0, 50)).thenReturn(new MailhogPageResponse(0, 0, 0, List.of()));
+
+        var result = mcpToolService.listMailhogMessages(0, 50);
+
+        assertTrue(result.contains("Found 0 message(s)"));
+        assertTrue(result.contains("No messages."));
+    }
+
+    @Test
+    void listMailhogMessagesPropagatesMailhogUnavailableException() {
+        when(mailhogService.getMessages(anyInt(), anyInt()))
+                .thenThrow(new MailhogUnavailableException("unavailable", null));
+
+        assertThrows(MailhogUnavailableException.class, () -> mcpToolService.listMailhogMessages(0, 50));
+    }
+
+    @Test
+    void searchMailhogMessagesDelegatesToServiceAndFormatsResponse() {
+        when(mailhogService.search("from", "sender@example.com", 0, 50)).thenReturn(pageResponse());
+
+        var result = mcpToolService.searchMailhogMessages("from", "sender@example.com", 0, 50);
+
+        assertTrue(result.contains("Found 1 message(s)"));
+        assertTrue(result.contains("Subject: Hello World"));
+        verify(mailhogService).search("from", "sender@example.com", 0, 50);
+    }
+
+    @Test
+    void searchMailhogMessagesPropagatesMailhogUnavailableException() {
+        when(mailhogService.search(anyString(), anyString(), anyInt(), anyInt()))
+                .thenThrow(new MailhogUnavailableException("unavailable", null));
+
+        assertThrows(MailhogUnavailableException.class,
+                () -> mcpToolService.searchMailhogMessages("from", "test", 0, 50));
+    }
+
+    private MailhogPageResponse pageResponse() {
+        var msg = new MailhogMessage(
+                "abc123",
+                new MailhogPath("sender", "example.com"),
+                List.of(new MailhogPath("recipient", "example.com")),
+                new MailhogContent(Map.of("Subject", List.of("Hello World")), 200),
+                "2025-01-01T10:00:00Z"
+        );
+        return new MailhogPageResponse(1, 1, 0, List.of(msg));
     }
 
     private EmailRequest emailRequest() {

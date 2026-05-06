@@ -24,6 +24,8 @@ spring:
 
 app:
   permissions: ${permissions-file:classpath:permissions.yaml}
+  mailhog:
+    url: ${mailhog-url:http://localhost:8025}
 
 logging:
   file:
