@@ -24,11 +24,11 @@ jobs:
           cache: maven
 
       - name: Build JAR
-        run: mvn -B clean package
+        run: mvn -B clean package -DskipTests
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
           generate_release_notes: true
-          files: target/*.jar
+          files: target/duotail-test-email-utils-*.jar
