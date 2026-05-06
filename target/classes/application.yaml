@@ -1,0 +1,32 @@
+spring:
+  application:
+    name: duotail-test-email-utils
+  mail:
+    host: ${mail-host:localhost}
+    port: ${mail-port:25}
+    properties:
+      mail:
+        smtp:
+          auth: ${mail-smtp-auth:false}
+          starttls:
+            enable: ${mail-smtp-starttls-enable:false}
+  ai:
+    mcp:
+      server:
+        protocol: STREAMABLE
+        name: duotail-test-email-mcp
+        version: 1.0.0
+        streamable-http:
+          mcp-endpoint: /mcp
+        annotation-scanner:
+          enabled: true
+
+
+app:
+  permissions: ${permissions-file:classpath:permissions.yaml}
+  mailhog:
+    url: ${mailhog-url:http://localhost:8025}
+
+logging:
+  file:
+    path: ${LOG_DIR:.}
