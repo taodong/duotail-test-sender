@@ -10,8 +10,7 @@ import org.springframework.web.client.RestClient;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
-import static org.springframework.test.web.client.response.MockRestResponseCreators.withResourceNotFound;
-import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.*;
 
 class MailhogServiceTest {
 
@@ -106,6 +105,79 @@ class MailhogServiceTest {
         mockServer.verify();
     }
 
+    @Test
+    void getMessageFetchesByIdAndMapsResponse() {
+        mockServer.expect(requestTo(BASE_URL + "/api/v1/messages/abc123"))
+                .andExpect(method(HttpMethod.GET))
+                .andRespond(withSuccess(messageJson("abc123", "Test Subject", "sender", "example.com", "recipient", "example.com"),
+                        MediaType.APPLICATION_JSON));
+
+        var result = service.getMessage("abc123");
+
+        assertEquals("abc123", result.id());
+        assertEquals("sender@example.com", result.from().address());
+        assertEquals("Test Subject", result.content().headers().get("Subject").getFirst());
+        mockServer.verify();
+    }
+
+    @Test
+    void getMessageThrowsMailhogMessageNotFoundExceptionOn404() {
+        mockServer.expect(requestTo(BASE_URL + "/api/v1/messages/missing"))
+                .andExpect(method(HttpMethod.GET))
+                .andRespond(withResourceNotFound());
+
+        var ex = assertThrows(MailhogMessageNotFoundException.class, () -> service.getMessage("missing"));
+
+        assertTrue(ex.getMessage().contains("missing"));
+        mockServer.verify();
+    }
+
+    @Test
+    void getMessageThrowsMailhogUnavailableExceptionOnServerError() {
+        mockServer.expect(requestTo(BASE_URL + "/api/v1/messages/abc123"))
+                .andExpect(method(HttpMethod.GET))
+                .andRespond(withServerError());
+
+        var ex = assertThrows(MailhogUnavailableException.class, () -> service.getMessage("abc123"));
+
+        assertTrue(ex.getMessage().contains(BASE_URL));
+        mockServer.verify();
+    }
+
+    @Test
+    void deleteMessageCallsCorrectEndpoint() {
+        mockServer.expect(requestTo(BASE_URL + "/api/v1/messages/abc123"))
+                .andExpect(method(HttpMethod.DELETE))
+                .andRespond(withSuccess());
+
+        assertDoesNotThrow(() -> service.deleteMessage("abc123"));
+        mockServer.verify();
+    }
+
+    @Test
+    void deleteMessageThrowsMailhogMessageNotFoundExceptionOn404() {
+        mockServer.expect(requestTo(BASE_URL + "/api/v1/messages/missing"))
+                .andExpect(method(HttpMethod.DELETE))
+                .andRespond(withResourceNotFound());
+
+        var ex = assertThrows(MailhogMessageNotFoundException.class, () -> service.deleteMessage("missing"));
+
+        assertTrue(ex.getMessage().contains("missing"));
+        mockServer.verify();
+    }
+
+    @Test
+    void deleteMessageThrowsMailhogUnavailableExceptionOnServerError() {
+        mockServer.expect(requestTo(BASE_URL + "/api/v1/messages/abc123"))
+                .andExpect(method(HttpMethod.DELETE))
+                .andRespond(withServerError());
+
+        var ex = assertThrows(MailhogUnavailableException.class, () -> service.deleteMessage("abc123"));
+
+        assertTrue(ex.getMessage().contains(BASE_URL));
+        mockServer.verify();
+    }
+
     private String pageJson(String subject, String fromMailbox, String fromDomain,
                             String toMailbox, String toDomain) {
         return """
@@ -131,5 +203,21 @@ class MailhogServiceTest {
         return """
                 { "total": 0, "count": 0, "start": 10, "items": [] }
                 """;
+    }
+
+    private String messageJson(String id, String subject, String fromMailbox, String fromDomain,
+                               String toMailbox, String toDomain) {
+        return """
+                {
+                  "ID": "%s",
+                  "From": { "Mailbox": "%s", "Domain": "%s" },
+                  "To":   [{ "Mailbox": "%s", "Domain": "%s" }],
+                  "Content": {
+                    "Headers": { "Subject": ["%s"] },
+                    "Size": 100
+                  },
+                  "Created": "2025-01-01T10:00:00Z"
+                }
+                """.formatted(id, fromMailbox, fromDomain, toMailbox, toDomain, subject);
     }
 }

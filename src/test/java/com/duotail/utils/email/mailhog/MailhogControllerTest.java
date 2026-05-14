@@ -1,6 +1,9 @@
 package com.duotail.utils.email.mailhog;
 
+import com.duotail.utils.email.mailhog.dto.MailhogContent;
+import com.duotail.utils.email.mailhog.dto.MailhogMessage;
 import com.duotail.utils.email.mailhog.dto.MailhogPageResponse;
+import com.duotail.utils.email.mailhog.dto.MailhogPath;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -10,11 +13,15 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -127,5 +134,77 @@ class MailhogControllerTest {
                         .param("query", "test@example.com"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.message").value("MailHog is unavailable at http://localhost:8025: timeout"));
+    }
+
+    @Test
+    void getMessageByIdReturnsOkWithBody() throws Exception {
+        var msg = singleMessage("abc123", "Hello");
+        when(mailhogService.getMessage("abc123")).thenReturn(msg);
+
+        mockMvc.perform(get("/api/email/messages/abc123").header("version", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ID").value("abc123"));
+    }
+
+    @Test
+    void getMessageByIdRequiresVersionHeader() throws Exception {
+        mockMvc.perform(get("/api/email/messages/abc123"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void getMessageByIdReturnsNotFoundWhenMessageMissing() throws Exception {
+        when(mailhogService.getMessage("missing"))
+                .thenThrow(new MailhogMessageNotFoundException("missing"));
+
+        mockMvc.perform(get("/api/email/messages/missing").header("version", "1"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("MailHog message not found: missing"));
+    }
+
+    @Test
+    void getMessageByIdReturnsNotFoundWhenMailhogUnavailable() throws Exception {
+        when(mailhogService.getMessage(anyString()))
+                .thenThrow(new MailhogUnavailableException("MailHog is unavailable at http://localhost:8025: timeout", null));
+
+        mockMvc.perform(get("/api/email/messages/abc123").header("version", "1"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("MailHog is unavailable at http://localhost:8025: timeout"));
+    }
+
+    @Test
+    void deleteMessageByIdReturnsNoContent() throws Exception {
+        doNothing().when(mailhogService).deleteMessage("abc123");
+
+        mockMvc.perform(delete("/api/email/messages/abc123").header("version", "1"))
+                .andExpect(status().isNoContent());
+
+        verify(mailhogService).deleteMessage("abc123");
+    }
+
+    @Test
+    void deleteMessageByIdRequiresVersionHeader() throws Exception {
+        mockMvc.perform(delete("/api/email/messages/abc123"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void deleteMessageByIdReturnsNotFoundWhenMessageMissing() throws Exception {
+        doThrow(new MailhogMessageNotFoundException("missing"))
+                .when(mailhogService).deleteMessage("missing");
+
+        mockMvc.perform(delete("/api/email/messages/missing").header("version", "1"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("MailHog message not found: missing"));
+    }
+
+    private MailhogMessage singleMessage(String id, String subject) {
+        return new MailhogMessage(
+                id,
+                new MailhogPath("sender", "example.com"),
+                List.of(new MailhogPath("recipient", "example.com")),
+                new MailhogContent(Map.of("Subject", List.of(subject)), 100),
+                "2025-01-01T10:00:00Z"
+        );
     }
 }

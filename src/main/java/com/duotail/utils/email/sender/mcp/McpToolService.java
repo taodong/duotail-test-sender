@@ -76,6 +76,31 @@ public class McpToolService {
         return formatResponse(mailhogService.search(kind, query, start, limit));
     }
 
+    @McpTool(description = "Get a specific email captured by MailHog by its message ID.")
+    public String getMailhogMessage(
+            @McpToolParam(description = "The MailHog message ID") String id
+    ) {
+        var msg = mailhogService.getMessage(id);
+        var subject = extractSubject(msg.content() != null ? msg.content().headers() : null);
+        var from = msg.from() != null ? msg.from().address() : "(unknown)";
+        var to = msg.to() != null
+                ? msg.to().stream().map(MailhogPath::address).collect(Collectors.joining(", "))
+                : "(unknown)";
+        return "Message ID: " + msg.id() + "\n" +
+                "Subject: " + subject + "\n" +
+                "From: " + from + "\n" +
+                "To: " + to + "\n" +
+                "Created: " + msg.created();
+    }
+
+    @McpTool(description = "Delete a specific email captured by MailHog by its message ID.")
+    public String deleteMailhogMessage(
+            @McpToolParam(description = "The MailHog message ID") String id
+    ) {
+        mailhogService.deleteMessage(id);
+        return "Message " + id + " deleted successfully.";
+    }
+
     private String formatResponse(MailhogPageResponse response) {
         var sb = new StringBuilder();
         sb.append("Found ").append(response.total()).append(" message(s). Showing ")

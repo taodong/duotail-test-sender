@@ -1,5 +1,6 @@
 package com.duotail.utils.email.sender.mcp;
 
+import com.duotail.utils.email.mailhog.MailhogMessageNotFoundException;
 import com.duotail.utils.email.mailhog.MailhogService;
 import com.duotail.utils.email.mailhog.MailhogUnavailableException;
 import com.duotail.utils.email.mailhog.dto.MailhogContent;
@@ -218,6 +219,69 @@ class McpToolServiceTest {
 
         assertThrows(MailhogUnavailableException.class,
                 () -> mcpToolService.searchMailhogMessages("from", "test", 0, 50));
+    }
+
+    @Test
+    void getMailhogMessageFormatsResponse() {
+        var msg = new MailhogMessage(
+                "abc123",
+                new MailhogPath("sender", "example.com"),
+                List.of(new MailhogPath("recipient", "example.com")),
+                new MailhogContent(Map.of("Subject", List.of("Hello World")), 200),
+                "2025-01-01T10:00:00Z"
+        );
+        when(mailhogService.getMessage("abc123")).thenReturn(msg);
+
+        var result = mcpToolService.getMailhogMessage("abc123");
+
+        assertTrue(result.contains("Message ID: abc123"));
+        assertTrue(result.contains("Subject: Hello World"));
+        assertTrue(result.contains("From: sender@example.com"));
+        assertTrue(result.contains("To: recipient@example.com"));
+        assertTrue(result.contains("Created: 2025-01-01T10:00:00Z"));
+        verify(mailhogService).getMessage("abc123");
+    }
+
+    @Test
+    void getMailhogMessageUsesNoSubjectFallbackWhenHeaderAbsent() {
+        var msg = new MailhogMessage("id1",
+                new MailhogPath("sender", "example.com"),
+                List.of(new MailhogPath("recipient", "example.com")),
+                new MailhogContent(Map.of(), 0),
+                "2025-01-01T10:00:00Z");
+        when(mailhogService.getMessage("id1")).thenReturn(msg);
+
+        var result = mcpToolService.getMailhogMessage("id1");
+
+        assertTrue(result.contains("Subject: (no subject)"));
+    }
+
+    @Test
+    void getMailhogMessagePropagatesMailhogMessageNotFoundException() {
+        when(mailhogService.getMessage("missing"))
+                .thenThrow(new MailhogMessageNotFoundException("missing"));
+
+        assertThrows(MailhogMessageNotFoundException.class,
+                () -> mcpToolService.getMailhogMessage("missing"));
+    }
+
+    @Test
+    void deleteMailhogMessageReturnsConfirmation() {
+        doNothing().when(mailhogService).deleteMessage("abc123");
+
+        var result = mcpToolService.deleteMailhogMessage("abc123");
+
+        assertEquals("Message abc123 deleted successfully.", result);
+        verify(mailhogService).deleteMessage("abc123");
+    }
+
+    @Test
+    void deleteMailhogMessagePropagatesMailhogMessageNotFoundException() {
+        doThrow(new MailhogMessageNotFoundException("missing"))
+                .when(mailhogService).deleteMessage("missing");
+
+        assertThrows(MailhogMessageNotFoundException.class,
+                () -> mcpToolService.deleteMailhogMessage("missing"));
     }
 
     private MailhogPageResponse pageResponse() {

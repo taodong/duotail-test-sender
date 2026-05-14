@@ -1,11 +1,13 @@
 package com.duotail.utils.email.mailhog;
 
+import com.duotail.utils.email.mailhog.dto.MailhogMessage;
 import com.duotail.utils.email.mailhog.dto.MailhogPageResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.http.converter.json.JacksonJsonHttpMessageConverter;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
@@ -54,6 +56,38 @@ public class MailhogService {
                             kind, query, start, limit)
                     .retrieve()
                     .body(MailhogPageResponse.class);
+        } catch (RestClientException e) {
+            logMailhogError(mailhogUrl, e);
+            throw new MailhogUnavailableException(
+                    "MailHog is unavailable at " + mailhogUrl + ": " + e.getMessage(), e);
+        }
+    }
+
+    public MailhogMessage getMessage(String id) {
+        try {
+            LOG.info("Fetching message from MailHog with id={}", id);
+            return restClient.get()
+                    .uri("/api/v1/messages/{id}", id)
+                    .retrieve()
+                    .body(MailhogMessage.class);
+        } catch (HttpClientErrorException.NotFound e) {
+            throw new MailhogMessageNotFoundException(id);
+        } catch (RestClientException e) {
+            logMailhogError(mailhogUrl, e);
+            throw new MailhogUnavailableException(
+                    "MailHog is unavailable at " + mailhogUrl + ": " + e.getMessage(), e);
+        }
+    }
+
+    public void deleteMessage(String id) {
+        try {
+            LOG.info("Deleting message from MailHog with id={}", id);
+            restClient.delete()
+                    .uri("/api/v1/messages/{id}", id)
+                    .retrieve()
+                    .toBodilessEntity();
+        } catch (HttpClientErrorException.NotFound e) {
+            throw new MailhogMessageNotFoundException(id);
         } catch (RestClientException e) {
             logMailhogError(mailhogUrl, e);
             throw new MailhogUnavailableException(
