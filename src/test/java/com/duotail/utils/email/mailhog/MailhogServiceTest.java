@@ -133,6 +133,18 @@ class MailhogServiceTest {
     }
 
     @Test
+    void getMessageThrowsMailhogMessageNotFoundExceptionOnNullBody() {
+        mockServer.expect(requestTo(BASE_URL + "/api/v1/messages/abc123"))
+                .andExpect(method(HttpMethod.GET))
+                .andRespond(withSuccess("null", MediaType.APPLICATION_JSON));
+
+        var ex = assertThrows(MailhogMessageNotFoundException.class, () -> service.getMessage("abc123"));
+
+        assertTrue(ex.getMessage().contains("abc123"));
+        mockServer.verify();
+    }
+
+    @Test
     void getMessageThrowsMailhogUnavailableExceptionOnServerError() {
         mockServer.expect(requestTo(BASE_URL + "/api/v1/messages/abc123"))
                 .andExpect(method(HttpMethod.GET))

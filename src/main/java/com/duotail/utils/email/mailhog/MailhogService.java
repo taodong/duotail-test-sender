@@ -66,10 +66,14 @@ public class MailhogService {
     public MailhogMessage getMessage(String id) {
         try {
             LOG.info("Fetching message from MailHog with id={}", id);
-            return restClient.get()
+            var msg = restClient.get()
                     .uri("/api/v1/messages/{id}", id)
                     .retrieve()
                     .body(MailhogMessage.class);
+            if (msg == null) {
+                throw new MailhogMessageNotFoundException(id);
+            }
+            return msg;
         } catch (HttpClientErrorException.NotFound e) {
             throw new MailhogMessageNotFoundException(id);
         } catch (RestClientException e) {

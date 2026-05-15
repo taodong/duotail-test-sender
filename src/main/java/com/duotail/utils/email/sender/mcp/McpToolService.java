@@ -122,7 +122,8 @@ public class McpToolService {
             sb.append(i + 1).append(". Subject: ").append(subject)
                     .append(" | From: ").append(from)
                     .append(" | To: ").append(to)
-                    .append(" | Created: ").append(msg.created()).append("\n");
+                    .append(" | Created: ").append(msg.created())
+                    .append(" | ID: ").append(msg.id()).append("\n");
         }
         return sb.toString();
     }

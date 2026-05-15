@@ -166,6 +166,7 @@ class McpToolServiceTest {
         assertTrue(result.contains("From: sender@example.com"));
         assertTrue(result.contains("To: recipient@example.com"));
         assertTrue(result.contains("Created: 2025-01-01T10:00:00Z"));
+        assertTrue(result.contains("ID: abc123"));
         verify(mailhogService).getMessages(0, 50);
     }
 
@@ -209,6 +210,7 @@ class McpToolServiceTest {
 
         assertTrue(result.contains("Found 1 message(s)"));
         assertTrue(result.contains("Subject: Hello World"));
+        assertTrue(result.contains("ID: abc123"));
         verify(mailhogService).search("from", "sender@example.com", 0, 50);
     }
 
