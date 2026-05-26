@@ -5,12 +5,12 @@
 	<parent>
 		<groupId>org.springframework.boot</groupId>
 		<artifactId>spring-boot-starter-parent</artifactId>
-		<version>4.0.3</version>
+		<version>4.0.6</version>
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
 	<groupId>com.duotail.utils</groupId>
 	<artifactId>email-sender</artifactId>
-	<version>0.4.0</version>
+	<version>0.4.1</version>
 	<name>email-sender</name>
 	<description>Test Email Sender</description>
 	<url/>
@@ -32,7 +32,8 @@
 		<commons-lang3.version>3.20.0</commons-lang3.version>
 		<openrewrite.maven.plugin.version>6.33.0</openrewrite.maven.plugin.version>
 		<lombok.version>1.18.44</lombok.version>
-		<spring-ai-mcp-starter.version>2.0.0-M3</spring-ai-mcp-starter.version>
+		<spring-ai-mcp-starter.version>2.0.0-M6</spring-ai-mcp-starter.version>
+		<tomcat.version>11.0.22</tomcat.version>
 	</properties>
 	<dependencies>
 		<dependency>
