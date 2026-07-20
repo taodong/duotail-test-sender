@@ -2,7 +2,7 @@
 
 ## Overview
 
-Duotail Test Sender is a utility service for sending test emails. It exposes seven RESTful endpoints and a matching set of MCP tools, all backed by the same `EmailSendService`.
+Duotail Test Sender is a utility service for sending test emails. It exposes eight RESTful endpoints and a matching set of MCP tools, backed by `EmailSendService` (sending/retrieval) and `BounceEmailService` (mocked bounces).
 
 Assumptions:
 1. All sending emails are test email to a SMTP server without authentication (e.g. MailHog, Postfix).
@@ -167,7 +167,59 @@ curl -X POST http://localhost:8080/api/eml \
 
 ---
 
-### 4. Retrieve Captured Emails (MailHog)
+### 4. Send Mocked Bounce
+
+Generate and send a mocked bounce — an RFC 3464 Delivery Status Notification (`multipart/report; report-type=delivery-status`) — back to an original sender, for testing bounce-handling logic. The DSN is delivered like any other email (so it is captured by MailHog for inspection).
+
+| Property | Value |
+|---|---|
+| **Method** | `POST` |
+| **Path** | `/api/bounce` |
+| **Content-Type** | `application/json` |
+| **Required header** | `version: 1` |
+
+#### Request Body (`BounceRequest`)
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `originalFrom` | `string` | Yes | Original sender's address; the bounce (NDR) is delivered back here |
+| `originalTo` | `string` | Yes | Recipient whose delivery "failed"; reported as the `Final-Recipient` in the DSN |
+| `originalSubject` | `string` | Yes | Subject of the original message; echoed in the wrapped headers and the bounce body |
+| `bounceType` | `string` | Yes | Bounce category: `HARD` (permanent, `5.x.x`) or `SOFT` (transient, `4.x.x`) |
+| `originalMessageId` | `string` | No | `Message-ID` of the original message; referenced by the DSN. Generated if omitted |
+| `statusCode` | `string` | No | RFC 3463 status code (e.g. `5.1.1`, `4.2.2`). Must match the `bounceType` class. Defaults to `5.1.1` (HARD) / `4.2.2` (SOFT) |
+| `diagnosticText` | `string` | No | Human-readable failure reason for the `Diagnostic-Code`. Defaults from a built-in status-code map |
+| `reportingMta` | `string` | No | MTA name emitted in `Reporting-MTA`. Defaults to `app.bounce.reporting-mta` |
+
+> **Permissions:** the bounce is sent *from* the configured mailer-daemon address (`app.bounce.mailer-daemon`), so that address must be allowed by the `from` permission block, and `originalFrom` by the `to` block — otherwise the request is rejected with `403 Forbidden`.
+
+#### Response
+
+| Status | Body | Condition |
+|---|---|---|
+| `200 OK` | _(empty)_ | Bounce sent successfully |
+| `400 Bad Request` | Validation error details | Request fails validation (e.g. `statusCode` class does not match `bounceType`) |
+| `403 Forbidden` | Error message | Mailer-daemon sender or original sender not permitted |
+| `500 Internal Server Error` | Error message | SMTP or other server error |
+
+#### Example
+
+```bash
+curl -X POST http://localhost:8080/api/bounce \
+  -H "version: 1" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "originalFrom": "sender@example.com",
+    "originalTo": "does-not-exist@example.com",
+    "originalSubject": "Your order confirmation",
+    "bounceType": "HARD",
+    "statusCode": "5.1.1"
+  }'
+```
+
+---
+
+### 5. Retrieve Captured Emails (MailHog)
 
 Retrieve emails captured by a MailHog server, newest first.
 
@@ -226,7 +278,7 @@ curl "http://localhost:8080/api/email/messages?start=10&limit=5" \
 
 ---
 
-### 5. Search Captured Emails (MailHog)
+### 6. Search Captured Emails (MailHog)
 
 Search emails captured by a MailHog server by sender, recipient, or body content.
 
@@ -249,7 +301,7 @@ Search emails captured by a MailHog server by sender, recipient, or body content
 
 | Status | Body | Condition |
 |---|---|---|
-| `200 OK` | `MailhogPageResponse` JSON (same shape as § 4) | Search completed successfully |
+| `200 OK` | `MailhogPageResponse` JSON (same shape as § 5) | Search completed successfully |
 | `400 Bad Request` | Validation error details | `kind` or `query` is missing |
 | `404 Not Found` | `{ "message": "..." }` | MailHog server is unreachable or returned an error |
 
@@ -267,7 +319,7 @@ curl "http://localhost:8080/api/email/search?kind=containing&query=activation+co
 
 ---
 
-### 6. Get Single Captured Email (MailHog)
+### 7. Get Single Captured Email (MailHog)
 
 Retrieve a single email captured by a MailHog server by its message ID.
 
@@ -287,7 +339,7 @@ Retrieve a single email captured by a MailHog server by its message ID.
 
 | Status | Body | Condition |
 |---|---|---|
-| `200 OK` | `MailhogMessage` JSON (same shape as items in § 4) | Message retrieved successfully |
+| `200 OK` | `MailhogMessage` JSON (same shape as items in § 5) | Message retrieved successfully |
 | `404 Not Found` | `{ "message": "MailHog message not found: {id}" }` | No message exists with the given ID |
 | `404 Not Found` | `{ "message": "..." }` | MailHog server is unreachable or returned an error |
 
@@ -300,7 +352,7 @@ curl http://localhost:8080/api/email/messages/abc123 \
 
 ---
 
-### 7. Delete Captured Email (MailHog)
+### 8. Delete Captured Email (MailHog)
 
 Delete a single email captured by a MailHog server by its message ID.
 
@@ -387,6 +439,27 @@ The service registers the following tools with the MCP (Model Context Protocol) 
 | `bcc` | `string[]` | No | Override the `bcc` addresses in the email header |
 
 **Returns:** `"EML email sent successfully."` on success.
+
+---
+
+### Tool: `sendBounce`
+
+**Description:** Send a mocked bounce (RFC 3464 DSN) back to an original sender for testing bounce handling.
+
+**Parameters:** A `BounceRequest` object with the following fields:
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `originalFrom` | `string` | Yes | Original sender's address; the bounce is delivered back here |
+| `originalTo` | `string` | Yes | Recipient whose delivery failed; reported as the `Final-Recipient` |
+| `originalSubject` | `string` | Yes | Subject of the original message |
+| `bounceType` | `string` | Yes | `HARD` (permanent, `5.x.x`) or `SOFT` (transient, `4.x.x`) |
+| `originalMessageId` | `string` | No | `Message-ID` of the original message; generated if omitted |
+| `statusCode` | `string` | No | RFC 3463 status code; must match `bounceType` class. Defaults per type |
+| `diagnosticText` | `string` | No | Failure reason for `Diagnostic-Code`; defaults from a built-in map |
+| `reportingMta` | `string` | No | Name emitted in `Reporting-MTA`; defaults to the configured value |
+
+**Returns:** `"Bounce sent successfully."` on success.
 
 ---
 
@@ -481,6 +554,8 @@ Subject falls back to `(no subject)` if the header is absent.
 | `spring.mail.properties.mail.smtp.starttls.enable` | `mail-smtp-starttls-enable` | Enable STARTTLS | Boolean | `false` | No |
 | `app.permissions` | `permissions-file` | Path to the permissions file. Supports Spring resource prefixes (`classpath:`, `file:`). | String | `classpath:permissions.yaml` | No |
 | `app.mailhog.url` | `mailhog-url` | URL of the MailHog server to query for email retrieval and search | String | `http://localhost:8025` | No |
+| `app.bounce.mailer-daemon` | `bounce-mailer-daemon` | Sender (`From`) address used for mocked bounces. Must be allowed by the `from` permission block. | String | `MAILER-DAEMON@mail.duotail.test` | No |
+| `app.bounce.reporting-mta` | `bounce-reporting-mta` | Value emitted in the DSN `Reporting-MTA` field when a request does not supply one | String | `dns; mail.duotail.test` | No |
 | `logging.file.path` | `LOG_DIR` | Directory where log files are written | String | `.` (current directory) | No |
 
 ### `permissions.yaml` File Structure
@@ -567,6 +642,8 @@ batchSize: 25
 | `permissions-file` | Overrides the path to the permissions YAML file. Accepts Spring resource prefixes (`classpath:`, `file:`). Can also be passed as a Java system property (`-Dpermissions-file=...`). | No | `classpath:permissions.yaml` | `file:/etc/email-sender/permissions.yaml` |
 | `LOG_DIR` | Directory where log files are written | No | `.` (current directory) | `/var/log/email-sender` |
 | `mailhog-url` | URL of the MailHog server used for email retrieval and search | No | `http://localhost:8025` | `http://mailhog:8025` |
+| `bounce-mailer-daemon` | Sender address used for mocked bounces (`/api/bounce`). Must be permitted by the `from` block. | No | `MAILER-DAEMON@mail.duotail.test` | `MAILER-DAEMON@mycompany.com` |
+| `bounce-reporting-mta` | Default `Reporting-MTA` value in generated bounce DSNs | No | `dns; mail.duotail.test` | `dns; mail.mycompany.com` |
 
 ---
 
