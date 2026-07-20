@@ -37,6 +37,10 @@ public class BounceRequest {
     private BounceType bounceType;
 
     @JsonPropertyDescription("Optional: RFC 3463 status code (e.g. 5.1.1, 4.2.2). Must match the bounceType class. Defaults per bounceType")
+    @jakarta.validation.constraints.Pattern(
+            regexp = "^$|^[45]\\.[0-9]{1,3}\\.[0-9]{1,3}$",
+            message = "statusCode must be a RFC 3463 code like 5.1.1 (HARD) or 4.2.2 (SOFT)"
+    )
     private String statusCode;
 
     @JsonPropertyDescription("Optional: human-readable failure reason for the Diagnostic-Code. Defaults from a built-in map")
