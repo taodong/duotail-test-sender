@@ -122,10 +122,10 @@ public class BounceEmailService {
 
     private MimeBodyPart originalHeadersPart(BounceRequest request,
                                              String originalMessageId) throws MessagingException {
-        var originalHeaders = "From: " + request.getOriginalFrom() + "\r\n"
-                + "To: " + request.getOriginalTo() + "\r\n"
-                + "Subject: " + request.getOriginalSubject() + "\r\n"
-                + "Message-ID: " + originalMessageId + "\r\n"
+        var originalHeaders = "From: " + StringUtils.replaceChars(request.getOriginalFrom(), "\r\n", "  ") + "\r\n"
+                + "To: " + StringUtils.replaceChars(request.getOriginalTo(), "\r\n", "  ") + "\r\n"
+                + "Subject: " + StringUtils.replaceChars(request.getOriginalSubject(), "\r\n", "  ") + "\r\n"
+                + "Message-ID: " + StringUtils.replaceChars(originalMessageId, "\r\n", "  ") + "\r\n"
                 + "Date: " + new MailDateFormat().format(new Date()) + "\r\n";
         var part = new MimeBodyPart();
         part.setDataHandler(new DataHandler(new ByteArrayDataSource(
