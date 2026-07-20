@@ -7,6 +7,9 @@ import com.duotail.utils.email.mailhog.dto.MailhogContent;
 import com.duotail.utils.email.mailhog.dto.MailhogMessage;
 import com.duotail.utils.email.mailhog.dto.MailhogPageResponse;
 import com.duotail.utils.email.mailhog.dto.MailhogPath;
+import com.duotail.utils.email.sender.BounceEmailService;
+import com.duotail.utils.email.sender.BounceRequest;
+import com.duotail.utils.email.sender.BounceType;
 import com.duotail.utils.email.sender.EmailRequest;
 import com.duotail.utils.email.sender.EmailSendService;
 import com.duotail.utils.email.sender.permission.PermissionException;
@@ -37,13 +40,44 @@ class McpToolServiceTest {
     private EmailSendService emailSendService;
 
     @Mock
+    private BounceEmailService bounceEmailService;
+
+    @Mock
     private MailhogService mailhogService;
 
     private McpToolService mcpToolService;
 
     @BeforeEach
     void setUp() {
-        mcpToolService = new McpToolService(emailSendService, mailhogService);
+        mcpToolService = new McpToolService(emailSendService, bounceEmailService, mailhogService);
+    }
+
+    @Test
+    void sendBounceDelegatesToBounceEmailService() throws Exception {
+        var request = bounceRequest();
+
+        var result = mcpToolService.sendBounce(request);
+
+        verify(bounceEmailService).sendBounce(request);
+        assertEquals("Bounce sent successfully.", result);
+    }
+
+    @Test
+    void sendBouncePropagatesPermissionViolation() throws Exception {
+        var request = bounceRequest();
+        doThrow(new PermissionException("Sender is not authorized: MAILER-DAEMON@mail.duotail.test"))
+                .when(bounceEmailService).sendBounce(request);
+
+        assertThrows(PermissionException.class, () -> mcpToolService.sendBounce(request));
+    }
+
+    private BounceRequest bounceRequest() {
+        var request = new BounceRequest();
+        request.setOriginalFrom("sender@example.com");
+        request.setOriginalTo("failed@example.com");
+        request.setOriginalSubject("Test");
+        request.setBounceType(BounceType.HARD);
+        return request;
     }
 
     @Test

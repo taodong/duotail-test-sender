@@ -26,6 +26,9 @@ app:
   permissions: ${permissions-file:classpath:permissions.yaml}
   mailhog:
     url: ${mailhog-url:http://localhost:8025}
+  bounce:
+    mailer-daemon: ${bounce-mailer-daemon:MAILER-DAEMON@mail.duotail.test}
+    reporting-mta: ${bounce-reporting-mta:dns; mail.duotail.test}
 
 logging:
   file:

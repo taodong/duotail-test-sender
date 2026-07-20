@@ -85,6 +85,12 @@ public class EmailSendService {
         javaMailSender.send(message);
     }
 
+    public void sendMimeMessage(MimeMessage message) throws MessagingException, PermissionException {
+        validateMimeMessagePermissions(message);
+        LOG.info("Sending pre-built MIME message [subject: '{}' ]", message.getSubject());
+        javaMailSender.send(message);
+    }
+
     public void sendEmails(Collection<EmailRequest> emailRequests) throws PermissionException {
         validateBatchPermissions(emailRequests);
         emailRequests.forEach(emailRequest -> {

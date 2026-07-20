@@ -3,6 +3,8 @@ package com.duotail.utils.email.sender.mcp;
 import com.duotail.utils.email.mailhog.MailhogService;
 import com.duotail.utils.email.mailhog.dto.MailhogPageResponse;
 import com.duotail.utils.email.mailhog.dto.MailhogPath;
+import com.duotail.utils.email.sender.BounceEmailService;
+import com.duotail.utils.email.sender.BounceRequest;
 import com.duotail.utils.email.sender.EmailRequest;
 import com.duotail.utils.email.sender.EmailSendService;
 import com.duotail.utils.email.sender.permission.PermissionException;
@@ -21,10 +23,14 @@ import java.util.stream.Collectors;
 public class McpToolService {
 
     private final EmailSendService emailSendService;
+    private final BounceEmailService bounceEmailService;
     private final MailhogService mailhogService;
 
-    public McpToolService(EmailSendService emailSendService, MailhogService mailhogService) {
+    public McpToolService(EmailSendService emailSendService,
+                          BounceEmailService bounceEmailService,
+                          MailhogService mailhogService) {
         this.emailSendService = emailSendService;
+        this.bounceEmailService = bounceEmailService;
         this.mailhogService = mailhogService;
     }
 
@@ -40,6 +46,12 @@ public class McpToolService {
     ) throws PermissionException {
         emailSendService.sendEmails(emails);
         return "Batch send triggered for " + emails.size() + " emails.";
+    }
+
+    @McpTool(description = "Send a mocked bounce (RFC 3464 DSN) back to an original sender for testing bounce handling")
+    public String sendBounce(BounceRequest request) throws PermissionException, MessagingException {
+        bounceEmailService.sendBounce(request);
+        return "Bounce sent successfully.";
     }
 
     @McpTool(description = "Send a raw .eml payload represented as base64")
