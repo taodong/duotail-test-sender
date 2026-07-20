@@ -74,7 +74,7 @@ public class BounceEmailService {
         message.setFrom(new InternetAddress(mailerDaemon));
         message.setRecipient(Message.RecipientType.TO, new InternetAddress(request.getOriginalFrom()));
         message.setSubject("Delivery Status Notification (" + bounceType.getSubjectSuffix() + ")");
-        message.setHeader("Auto-Submitted", "auto-replied");
+        message.setHeader("Auto-Submitted", "auto-generated");
         message.setHeader("In-Reply-To", originalMessageId);
         message.setHeader("References", originalMessageId);
 
