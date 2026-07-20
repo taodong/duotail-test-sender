@@ -11,6 +11,8 @@ import jakarta.mail.internet.MimeBodyPart;
 import jakarta.mail.internet.MimeMessage;
 import jakarta.mail.internet.MimeMultipart;
 import jakarta.mail.util.ByteArrayDataSource;
+import jakarta.validation.ConstraintViolationException;
+import jakarta.validation.Validator;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Value;
@@ -32,18 +34,28 @@ public class BounceEmailService {
 
     private final Properties properties = new Properties();
     private final EmailSendService emailSendService;
+    private final Validator validator;
     private final String mailerDaemon;
     private final String defaultReportingMta;
 
     public BounceEmailService(EmailSendService emailSendService,
+                              Validator validator,
                               @Value("${app.bounce.mailer-daemon}") String mailerDaemon,
                               @Value("${app.bounce.reporting-mta}") String defaultReportingMta) {
         this.emailSendService = emailSendService;
+        this.validator = validator;
         this.mailerDaemon = mailerDaemon;
         this.defaultReportingMta = defaultReportingMta;
     }
 
     public void sendBounce(BounceRequest request) throws MessagingException, PermissionException {
+        // Guard callers that skip @Valid (e.g. the MCP tool) so invalid input fails cleanly
+        // rather than NPE-ing while the DSN is built.
+        var violations = validator.validate(request);
+        if (!violations.isEmpty()) {
+            throw new ConstraintViolationException(violations);
+        }
+
         var statusCode = StringUtils.isNotBlank(request.getStatusCode())
                 ? request.getStatusCode()
                 : request.getBounceType().getDefaultStatusCode();

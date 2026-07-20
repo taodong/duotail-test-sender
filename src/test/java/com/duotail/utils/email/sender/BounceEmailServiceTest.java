@@ -5,6 +5,10 @@ import jakarta.mail.Message;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 import jakarta.mail.internet.MimeMultipart;
+import jakarta.validation.ConstraintViolationException;
+import jakarta.validation.Validation;
+import jakarta.validation.Validator;
+import jakarta.validation.ValidatorFactory;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -20,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 @ExtendWith(MockitoExtension.class)
 class BounceEmailServiceTest {
@@ -34,7 +39,9 @@ class BounceEmailServiceTest {
 
     @BeforeEach
     void setUp() {
-        bounceEmailService = new BounceEmailService(emailSendService, MAILER_DAEMON, REPORTING_MTA);
+        ValidatorFactory factory = Validation.buildDefaultValidatorFactory();
+        Validator validator = factory.getValidator();
+        bounceEmailService = new BounceEmailService(emailSendService, validator, MAILER_DAEMON, REPORTING_MTA);
     }
 
     @Test
@@ -103,6 +110,38 @@ class BounceEmailServiceTest {
         var message = capturedMessage();
         assertEquals("<orig-123@example.com>", message.getHeader("In-Reply-To")[0]);
         assertTrue(asString(message).contains("Message-ID: <orig-123@example.com>"));
+    }
+
+    @Test
+    void unmappedStatusCodeFallsBackToGenericDiagnostic() throws Exception {
+        var hard = request(BounceType.HARD);
+        hard.setStatusCode("5.9.9"); // valid HARD class, absent from the built-in map
+
+        bounceEmailService.sendBounce(hard);
+
+        var raw = asString(capturedMessage());
+        assertTrue(raw.contains("Status: 5.9.9"));
+        assertTrue(raw.contains("Diagnostic-Code: smtp; 550 5.0.0 Permanent failure"));
+    }
+
+    @Test
+    void unmappedSoftStatusCodeFallsBackToTransientDiagnostic() throws Exception {
+        var soft = request(BounceType.SOFT);
+        soft.setStatusCode("4.9.9"); // valid SOFT class, absent from the built-in map
+
+        bounceEmailService.sendBounce(soft);
+
+        var raw = asString(capturedMessage());
+        assertTrue(raw.contains("Diagnostic-Code: smtp; 451 4.0.0 Temporary failure"));
+    }
+
+    @Test
+    void rejectsInvalidRequestThatSkippedBeanValidation() {
+        var invalid = request(BounceType.HARD);
+        invalid.setBounceType(null); // an MCP caller can omit this since @Valid does not run there
+
+        assertThrows(ConstraintViolationException.class, () -> bounceEmailService.sendBounce(invalid));
+        verifyNoInteractions(emailSendService);
     }
 
     @Test
