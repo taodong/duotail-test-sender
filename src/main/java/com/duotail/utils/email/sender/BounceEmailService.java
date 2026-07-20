@@ -108,7 +108,7 @@ public class BounceEmailService {
                                             String statusCode,
                                             String diagnostic,
                                             String reportingMta) throws MessagingException {
-        var deliveryStatus = "Reporting-MTA: " + reportingMta + "\r\n"
+        var deliveryStatus = "Reporting-MTA: " + StringUtils.replaceChars(reportingMta, "\r\n", "  ") + "\r\n"
                 + "\r\n"
                 + "Final-Recipient: rfc822; " + request.getOriginalTo() + "\r\n"
                 + "Action: " + request.getBounceType().getAction() + "\r\n"
