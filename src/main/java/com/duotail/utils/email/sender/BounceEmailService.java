@@ -110,10 +110,10 @@ public class BounceEmailService {
                                             String reportingMta) throws MessagingException {
         var deliveryStatus = "Reporting-MTA: " + StringUtils.replaceChars(reportingMta, "\r\n", "  ") + "\r\n"
                 + "\r\n"
-                + "Final-Recipient: rfc822; " + request.getOriginalTo() + "\r\n"
+                + "Final-Recipient: rfc822; " + StringUtils.replaceChars(request.getOriginalTo(), "\r\n", "  ") + "\r\n"
                 + "Action: " + request.getBounceType().getAction() + "\r\n"
-                + "Status: " + statusCode + "\r\n"
-                + "Diagnostic-Code: " + diagnostic + "\r\n";
+                + "Status: " + StringUtils.replaceChars(statusCode, "\r\n", "  ") + "\r\n"
+                + "Diagnostic-Code: " + StringUtils.replaceChars(diagnostic, "\r\n", "  ") + "\r\n";
         var part = new MimeBodyPart();
         part.setDataHandler(new DataHandler(new ByteArrayDataSource(
                 deliveryStatus.getBytes(StandardCharsets.UTF_8), "message/delivery-status")));
