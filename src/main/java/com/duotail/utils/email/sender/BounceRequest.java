@@ -48,9 +48,9 @@ public class BounceRequest {
     @JsonIgnore
     @AssertTrue(message = "statusCode class must match bounceType (5.x.x for HARD, 4.x.x for SOFT)")
     public boolean isStatusCodeConsistent() {
-        if (statusCode == null || bounceType == null) {
+        if (statusCode == null || statusCode.isBlank() || bounceType == null) {
             return true;
         }
-        return statusCode.startsWith(bounceType.getStatusClassPrefix());
+        return statusCode.trim().startsWith(bounceType.getStatusClassPrefix());
     }
 }
