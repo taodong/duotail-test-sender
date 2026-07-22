@@ -13,6 +13,7 @@ import com.duotail.utils.email.sender.permission.SenderPermission;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
@@ -32,10 +33,14 @@ public class EmailSendService {
     private final Properties properties = new Properties();
 
     private final JavaMailSender javaMailSender;
+    private final JavaMailSender bounceMailSender;
     private final SenderPermission senderPermission;
 
-    public EmailSendService(JavaMailSender javaMailSender, SenderPermission senderPermission) {
+    public EmailSendService(@Qualifier("mailSender") JavaMailSender javaMailSender,
+                            @Qualifier("bounceMailSender") JavaMailSender bounceMailSender,
+                            SenderPermission senderPermission) {
         this.javaMailSender = javaMailSender;
+        this.bounceMailSender = bounceMailSender;
         this.senderPermission = senderPermission;
     }
 
@@ -89,6 +94,17 @@ public class EmailSendService {
         validateMimeMessagePermissions(message);
         LOG.info("Sending pre-built MIME message [subject: '{}' ]", message.getSubject());
         javaMailSender.send(message);
+    }
+
+    /**
+     * Sends a pre-built bounce (DSN) via the dedicated {@code bounceMailSender}, which emits a null
+     * SMTP reverse-path ({@code MAIL FROM:<>}) so the message is classified as a bounce downstream.
+     * The message {@code From:} header is still validated against sender permissions.
+     */
+    public void sendBounceMimeMessage(MimeMessage message) throws MessagingException, PermissionException {
+        validateMimeMessagePermissions(message);
+        LOG.info("Sending pre-built bounce MIME message with null reverse-path [subject: '{}' ]", message.getSubject());
+        bounceMailSender.send(message);
     }
 
     public void sendEmails(Collection<EmailRequest> emailRequests) throws PermissionException {

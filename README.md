@@ -556,6 +556,7 @@ Subject falls back to `(no subject)` if the header is absent.
 | `app.mailhog.url` | `mailhog-url` | URL of the MailHog server to query for email retrieval and search | String | `http://localhost:8025` | No |
 | `app.bounce.mailer-daemon` | `bounce-mailer-daemon` | Sender (`From`) address used for mocked bounces. Must be allowed by the `from` permission block. | String | `MAILER-DAEMON@mail.duotail.test` | No |
 | `app.bounce.reporting-mta` | `bounce-reporting-mta` | Value emitted in the DSN `Reporting-MTA` field when a request does not supply one | String | `dns; mail.duotail.test` | No |
+| `app.bounce.reverse-path` | `bounce-reverse-path` | SMTP `MAIL FROM` (envelope reverse-path) for mocked bounces. `<>` (the null sender) is required for a DSN to be recognized as a bounce; override to a real address if the target MTA rejects an empty reverse-path. | String | `<>` | No |
 | `logging.file.path` | `LOG_DIR` | Directory where log files are written | String | `.` (current directory) | No |
 
 ### `permissions.yaml` File Structure
@@ -644,6 +645,7 @@ batchSize: 25
 | `mailhog-url` | URL of the MailHog server used for email retrieval and search | No | `http://localhost:8025` | `http://mailhog:8025` |
 | `bounce-mailer-daemon` | Sender address used for mocked bounces (`/api/bounce`). Must be permitted by the `from` block. | No | `MAILER-DAEMON@mail.duotail.test` | `MAILER-DAEMON@mycompany.com` |
 | `bounce-reporting-mta` | Default `Reporting-MTA` value in generated bounce DSNs | No | `dns; mail.duotail.test` | `dns; mail.mycompany.com` |
+| `bounce-reverse-path` | SMTP envelope `MAIL FROM` for mocked bounces; `<>` is the null sender required for bounce recognition | No | `<>` | `mailer-daemon@mycompany.com` |
 
 ---
 

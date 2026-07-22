@@ -29,6 +29,10 @@ app:
   bounce:
     mailer-daemon: ${bounce-mailer-daemon:MAILER-DAEMON@mail.duotail.test}
     reporting-mta: ${bounce-reporting-mta:dns; mail.duotail.test}
+    # SMTP MAIL FROM (envelope reverse-path) for mocked bounces; "<>" is the null sender
+    # required for a DSN to be recognized as a bounce. Override to a real address if the
+    # target MTA rejects an empty reverse-path.
+    reverse-path: ${bounce-reverse-path:<>}
 
 logging:
   file:
