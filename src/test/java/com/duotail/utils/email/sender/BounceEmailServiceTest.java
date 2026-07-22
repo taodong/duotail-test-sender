@@ -73,6 +73,9 @@ class BounceEmailServiceTest {
         assertTrue(raw.contains("Diagnostic-Code: smtp; 550 5.1.1 User unknown"));
         // original headers echoed in the message/rfc822-headers part
         assertTrue(raw.contains("Subject: Your order confirmation"));
+        // a synthetic Received header so origin-verifying bounce classifiers find trace headers
+        assertTrue(raw.contains("Received: from failed@example.com by mail.duotail.test"),
+                "expected a synthetic Received header in the wrapped original headers");
     }
 
     @Test
@@ -147,14 +150,14 @@ class BounceEmailServiceTest {
     @Test
     void propagatesPermissionExceptionFromSend() throws Exception {
         doThrow(new PermissionException("Sender is not authorized: " + MAILER_DAEMON))
-                .when(emailSendService).sendMimeMessage(org.mockito.ArgumentMatchers.any());
+                .when(emailSendService).sendBounceMimeMessage(org.mockito.ArgumentMatchers.any());
 
         assertThrows(PermissionException.class, () -> bounceEmailService.sendBounce(request(BounceType.HARD)));
     }
 
     private MimeMessage capturedMessage() throws MessagingException, PermissionException {
         var captor = ArgumentCaptor.forClass(MimeMessage.class);
-        verify(emailSendService).sendMimeMessage(captor.capture());
+        verify(emailSendService).sendBounceMimeMessage(captor.capture());
         return captor.getValue();
     }
 

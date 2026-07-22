@@ -73,7 +73,7 @@ public class BounceEmailService {
 
         LOG.info("Sending {} bounce [to original sender: {} | failed recipient: {} | status: {} ]",
                 request.getBounceType(), request.getOriginalFrom(), request.getOriginalTo(), statusCode);
-        emailSendService.sendMimeMessage(message);
+        emailSendService.sendBounceMimeMessage(message);
     }
 
     private MimeMessage buildBounceMessage(BounceRequest request,
@@ -93,7 +93,7 @@ public class BounceEmailService {
         var report = new MimeMultipart("report");
         report.addBodyPart(humanReadablePart(request, statusCode, diagnostic));
         report.addBodyPart(deliveryStatusPart(request, statusCode, diagnostic, reportingMta));
-        report.addBodyPart(originalHeadersPart(request, originalMessageId));
+        report.addBodyPart(originalHeadersPart(request, originalMessageId, reportingMta));
 
         message.setContent(report);
         // MimeMultipart("report") yields "multipart/report" but not the required report-type parameter.
@@ -133,8 +133,19 @@ public class BounceEmailService {
     }
 
     private MimeBodyPart originalHeadersPart(BounceRequest request,
-                                             String originalMessageId) throws MessagingException {
-        var originalHeaders = "From: " + StringUtils.replaceChars(request.getOriginalFrom(), "\r\n", "  ") + "\r\n"
+                                             String originalMessageId,
+                                             String reportingMta) throws MessagingException {
+        // A synthetic Received header so bounce classifiers that verify origin (e.g. Haraka's
+        // non_local_msgid check) find the trace headers they expect; the host is taken from the
+        // Reporting-MTA, dropping any "type;" prefix (e.g. "dns; mail.duotail.test").
+        var receivedHost = StringUtils.defaultIfBlank(
+                StringUtils.substringAfter(reportingMta, ";").trim(), reportingMta);
+        var receivedLine = "Received: from " + StringUtils.replaceChars(request.getOriginalTo(), "\r\n", "  ")
+                + " by " + StringUtils.replaceChars(receivedHost, "\r\n", "  ")
+                + " with ESMTP id " + UUID.randomUUID()
+                + "; " + new MailDateFormat().format(new Date()) + "\r\n";
+        var originalHeaders = receivedLine
+                + "From: " + StringUtils.replaceChars(request.getOriginalFrom(), "\r\n", "  ") + "\r\n"
                 + "To: " + StringUtils.replaceChars(request.getOriginalTo(), "\r\n", "  ") + "\r\n"
                 + "Subject: " + StringUtils.replaceChars(request.getOriginalSubject(), "\r\n", "  ") + "\r\n"
                 + "Message-ID: " + StringUtils.replaceChars(originalMessageId, "\r\n", "  ") + "\r\n"

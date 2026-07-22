@@ -36,17 +36,21 @@ class EmailSendServiceTest {
     @Mock
     private JavaMailSender javaMailSender;
 
+    @Mock
+    private JavaMailSender bounceMailSender;
+
     private EmailSendService emailSendService;
 
     @BeforeEach
     void setUp() {
-        emailSendService = new EmailSendService(javaMailSender, allowAllPermission());
+        emailSendService = new EmailSendService(javaMailSender, bounceMailSender, allowAllPermission());
     }
 
     @Test
     void sendEmailAllowsFormattedAddressesWhenPermissionsMatch() throws MessagingException, PermissionException {
         emailSendService = new EmailSendService(
                 javaMailSender,
+                bounceMailSender,
                 new SenderPermission(
                         new ContactPermission(false, List.of("whatever.com"), List.of()),
                         new ContactPermission(false, List.of("abc.com", "ppp.con", "fidsf.com", "bfds.com"), List.of()),
@@ -76,6 +80,7 @@ class EmailSendServiceTest {
     void sendEmailThrowsWhenSenderIsNotAuthorized() {
         emailSendService = new EmailSendService(
                 javaMailSender,
+                bounceMailSender,
                 new SenderPermission(
                         new ContactPermission(false, List.of("allowed.com"), List.of()),
                         new ContactPermission(true, List.of(), List.of()),
@@ -94,6 +99,7 @@ class EmailSendServiceTest {
     void sendEmailThrowsWhenRecipientIsNotAuthorized() {
         emailSendService = new EmailSendService(
                 javaMailSender,
+                bounceMailSender,
                 new SenderPermission(
                         new ContactPermission(true, List.of(), List.of()),
                         new ContactPermission(false, List.of("allowed.com"), List.of()),
@@ -113,7 +119,7 @@ class EmailSendServiceTest {
 
     @Test
     void sendEmailsThrowsWhenBatchSizeExceedsAllowedLimit() {
-        emailSendService = new EmailSendService(javaMailSender, new SenderPermission(
+        emailSendService = new EmailSendService(javaMailSender, bounceMailSender, new SenderPermission(
                 new ContactPermission(true, List.of(), List.of()),
                 new ContactPermission(true, List.of(), List.of()),
                 1
@@ -133,6 +139,7 @@ class EmailSendServiceTest {
     void sendEmailsValidatesAllPermissionsBeforeSendingBatch() {
         emailSendService = new EmailSendService(
                 javaMailSender,
+                bounceMailSender,
                 new SenderPermission(
                         new ContactPermission(true, List.of(), List.of()),
                         new ContactPermission(false, List.of("allowed.com"), List.of()),
@@ -182,6 +189,7 @@ class EmailSendServiceTest {
     void sendEmailInFileThrowsWhenEmlRecipientIsNotAuthorized() {
         emailSendService = new EmailSendService(
                 javaMailSender,
+                bounceMailSender,
                 new SenderPermission(
                         new ContactPermission(true, List.of(), List.of()),
                         new ContactPermission(false, List.of("allowed.com"), List.of()),
@@ -206,6 +214,7 @@ class EmailSendServiceTest {
     void sendEmailInFileThrowsWhenOverrideSenderIsNotAuthorized() {
         emailSendService = new EmailSendService(
                 javaMailSender,
+                bounceMailSender,
                 new SenderPermission(
                         new ContactPermission(false, List.of("allowed.com"), List.of()),
                         new ContactPermission(true, List.of(), List.of()),
@@ -230,6 +239,36 @@ class EmailSendServiceTest {
 
         assertEquals("Sender is not authorized: Denied Sender <sender@blocked.com>", exception.getMessage());
         verifyNoInteractions(javaMailSender);
+    }
+
+    @Test
+    void sendBounceMimeMessageDispatchesThroughBounceSenderAfterValidation() throws Exception {
+        var message = new MimeMessage((jakarta.mail.Session) null);
+        message.setFrom(new InternetAddress("mailer-daemon@allowed.com"));
+        message.setRecipient(Message.RecipientType.TO, new InternetAddress("sender@allowed.com"));
+        message.setSubject("Delivery Status Notification (Failure)");
+
+        emailSendService = new EmailSendService(javaMailSender, bounceMailSender, allowAllPermission());
+        emailSendService.sendBounceMimeMessage(message);
+
+        verify(bounceMailSender).send(message);
+        verifyNoInteractions(javaMailSender);
+    }
+
+    @Test
+    void sendBounceMimeMessageThrowsWhenSenderNotAuthorized() throws Exception {
+        var message = new MimeMessage((jakarta.mail.Session) null);
+        message.setFrom(new InternetAddress("mailer-daemon@denied.com"));
+        message.setRecipient(Message.RecipientType.TO, new InternetAddress("sender@allowed.com"));
+
+        emailSendService = new EmailSendService(javaMailSender, bounceMailSender, new SenderPermission(
+                new ContactPermission(false, List.of("allowed.com"), List.of()),
+                new ContactPermission(true, List.of(), List.of()),
+                10
+        ));
+
+        assertThrows(PermissionException.class, () -> emailSendService.sendBounceMimeMessage(message));
+        verifyNoInteractions(bounceMailSender);
     }
 
     private EmailRequest emailRequest(String from, Set<String> to) {
