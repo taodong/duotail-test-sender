@@ -7,6 +7,8 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
+import java.nio.charset.StandardCharsets;
+
 import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
@@ -153,6 +155,80 @@ class MailhogServiceTest {
         var ex = assertThrows(MailhogUnavailableException.class, () -> service.getMessage("abc123"));
 
         assertTrue(ex.getMessage().contains(BASE_URL));
+        mockServer.verify();
+    }
+
+    @Test
+    void getMessageEmlDownloadsRawBytes() {
+        var eml = "Subject: Raw\r\n\r\nbody";
+        mockServer.expect(requestTo(BASE_URL + "/api/v1/messages/abc123/download"))
+                .andExpect(method(HttpMethod.GET))
+                .andRespond(withSuccess(eml, MediaType.valueOf("message/rfc822")));
+
+        var result = service.getMessageEml("abc123");
+
+        assertArrayEquals(eml.getBytes(StandardCharsets.UTF_8), result);
+        mockServer.verify();
+    }
+
+    @Test
+    void getMessageEmlThrowsMailhogMessageNotFoundExceptionOn404() {
+        mockServer.expect(requestTo(BASE_URL + "/api/v1/messages/missing/download"))
+                .andExpect(method(HttpMethod.GET))
+                .andRespond(withResourceNotFound());
+
+        var ex = assertThrows(MailhogMessageNotFoundException.class, () -> service.getMessageEml("missing"));
+
+        assertTrue(ex.getMessage().contains("missing"));
+        mockServer.verify();
+    }
+
+    @Test
+    void getMessageEmlThrowsMailhogMessageNotFoundExceptionOnEmptyBody() {
+        mockServer.expect(requestTo(BASE_URL + "/api/v1/messages/abc123/download"))
+                .andExpect(method(HttpMethod.GET))
+                .andRespond(withSuccess("", MediaType.valueOf("message/rfc822")));
+
+        var ex = assertThrows(MailhogMessageNotFoundException.class, () -> service.getMessageEml("abc123"));
+
+        assertTrue(ex.getMessage().contains("abc123"));
+        mockServer.verify();
+    }
+
+    @Test
+    void getMessageEmlThrowsMailhogUnavailableExceptionWhenMessageExistsButDownloadFails() {
+        mockServer.expect(requestTo(BASE_URL + "/api/v1/messages/abc123/download"))
+                .andExpect(method(HttpMethod.GET))
+                .andRespond(withServerError());
+        // The probe confirms the message exists, so this is a genuine MailHog problem
+        mockServer.expect(requestTo(BASE_URL + "/api/v1/messages/abc123"))
+                .andExpect(method(HttpMethod.GET))
+                .andRespond(withSuccess(messageJson("abc123", "Test Subject", "sender", "example.com",
+                        "recipient", "example.com"), MediaType.APPLICATION_JSON));
+
+        var ex = assertThrows(MailhogUnavailableException.class, () -> service.getMessageEml("abc123"));
+
+        assertTrue(ex.getMessage().contains(BASE_URL));
+        mockServer.verify();
+    }
+
+    /**
+     * MailHog answers /download for an unknown id by closing the connection with no response at
+     * all, which reaches the client as a transport error rather than a 404. The id must still be
+     * reported as not found rather than as a MailHog outage.
+     */
+    @Test
+    void getMessageEmlReportsNotFoundWhenDownloadFailsAndMessageDoesNotExist() {
+        mockServer.expect(requestTo(BASE_URL + "/api/v1/messages/missing/download"))
+                .andExpect(method(HttpMethod.GET))
+                .andRespond(withServerError());
+        mockServer.expect(requestTo(BASE_URL + "/api/v1/messages/missing"))
+                .andExpect(method(HttpMethod.GET))
+                .andRespond(withSuccess("null", MediaType.APPLICATION_JSON));
+
+        var ex = assertThrows(MailhogMessageNotFoundException.class, () -> service.getMessageEml("missing"));
+
+        assertTrue(ex.getMessage().contains("missing"));
         mockServer.verify();
     }
 

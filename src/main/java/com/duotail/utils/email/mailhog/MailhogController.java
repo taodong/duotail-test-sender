@@ -1,5 +1,6 @@
 package com.duotail.utils.email.mailhog;
 
+import com.duotail.utils.email.mailhog.dto.EmailContent;
 import com.duotail.utils.email.mailhog.dto.MailhogMessage;
 import com.duotail.utils.email.mailhog.dto.MailhogPageResponse;
 import org.springframework.http.ResponseEntity;
@@ -15,9 +16,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class MailhogController {
 
     private final MailhogService mailhogService;
+    private final EmlContentExtractor emlContentExtractor;
 
-    public MailhogController(MailhogService mailhogService) {
+    public MailhogController(MailhogService mailhogService, EmlContentExtractor emlContentExtractor) {
         this.mailhogService = mailhogService;
+        this.emlContentExtractor = emlContentExtractor;
     }
 
     @GetMapping("/messages")
@@ -31,6 +34,11 @@ public class MailhogController {
     @GetMapping("/messages/{id}")
     public ResponseEntity<MailhogMessage> getMessage(@PathVariable String id) {
         return ResponseEntity.ok(mailhogService.getMessage(id));
+    }
+
+    @GetMapping("/messages/{id}/content")
+    public ResponseEntity<EmailContent> getMessageContent(@PathVariable String id) {
+        return ResponseEntity.ok(emlContentExtractor.extract(id, mailhogService.getMessageEml(id)));
     }
 
     @DeleteMapping("/messages/{id}")

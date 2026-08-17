@@ -23,4 +23,14 @@ public class MailhogExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(Map.of("message", ex.getMessage()));
     }
+
+    /**
+     * Distinct from the 404s above: the message was found, it just could not be parsed.
+     */
+    @SuppressWarnings("unused")
+    @ExceptionHandler(MailhogMessageParseException.class)
+    public ResponseEntity<Map<String, String>> handle(MailhogMessageParseException ex) {
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("message", ex.getMessage()));
+    }
 }

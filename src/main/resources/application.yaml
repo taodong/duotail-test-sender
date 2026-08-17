@@ -26,6 +26,10 @@ app:
   permissions: ${permissions-file:classpath:permissions.yaml}
   mailhog:
     url: ${mailhog-url:http://localhost:8025}
+    # Total decoded characters returned for one captured email -- bodies and parts share this
+    # allowance -- so a large payload cannot blow up an MCP response. Content beyond it is
+    # truncated, and the response is flagged with truncated=true.
+    max-content-chars: ${mailhog-max-content-chars:100000}
   bounce:
     mailer-daemon: ${bounce-mailer-daemon:MAILER-DAEMON@mail.duotail.test}
     reporting-mta: ${bounce-reporting-mta:dns; mail.duotail.test}

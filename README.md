@@ -2,7 +2,7 @@
 
 ## Overview
 
-Duotail Test Sender is a utility service for sending test emails. It exposes eight RESTful endpoints and a matching set of MCP tools, backed by `EmailSendService` (sending/retrieval) and `BounceEmailService` (mocked bounces).
+Duotail Test Sender is a utility service for sending test emails. It exposes nine RESTful endpoints and a matching set of MCP tools, backed by `EmailSendService` (sending/retrieval) and `BounceEmailService` (mocked bounces).
 
 Assumptions:
 1. All sending emails are test email to a SMTP server without authentication (e.g. MailHog, Postfix).
@@ -385,6 +385,65 @@ curl -X DELETE http://localhost:8080/api/email/messages/abc123 \
 
 ---
 
+### 9. Get Captured Email Content (MailHog)
+
+Retrieve the full headers and the **decoded** body of a captured email. Unlike § 7, which
+returns metadata only, this downloads the raw RFC-822 message from MailHog and decodes it, so
+quoted-printable and base64 bodies come back as readable text — a confirmation or activation
+URL arrives intact rather than split across lines with `=3D` escapes.
+
+| Property | Value |
+|---|---|
+| **Method** | `GET` |
+| **Path** | `/api/email/messages/{id}/content` |
+| **Required header** | `version: 1` |
+
+#### Path Parameters
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `id` | string | Yes | The MailHog message ID |
+
+#### Response
+
+| Status | Body | Condition |
+|---|---|---|
+| `200 OK` | `EmailContent` JSON (see below) | Content retrieved successfully |
+| `404 Not Found` | `{ "message": "MailHog message not found: {id}" }` | No message exists with the given ID |
+| `404 Not Found` | `{ "message": "..." }` | MailHog server is unreachable or returned an error |
+| `500 Internal Server Error` | `{ "message": "Failed to parse MailHog message: {id}" }` | The message was found but could not be parsed |
+
+#### `EmailContent` Shape
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | The MailHog message ID |
+| `headers` | array of `{ name, value }` | Every header in wire order; repeated headers (e.g. `Received`) are preserved |
+| `textBody` | string \| null | Decoded `text/plain` part, or `null` if absent |
+| `htmlBody` | string \| null | Decoded `text/html` part, or `null` if absent |
+| `attachments` | array of `{ filename, contentType, size }` | Attachment metadata only — content is never inlined |
+| `otherParts` | array of `{ contentType, content }` | Textual leaf parts that are neither body nor attachment — most importantly the `message/delivery-status` and `message/rfc822-headers` parts of a DSN, which carry `Status`, `Action`, and `Diagnostic-Code` |
+| `truncated` | boolean | `true` if the decoded content exceeded `app.mailhog.max-content-chars` and was cut |
+
+Header values are unfolded and RFC 2047 decoded, so an encoded `Subject` such as
+`=?UTF-8?B?QmVzdMOkdGlndW5n?=` is returned as readable text. A part that cannot be decoded
+(an unknown charset like `unknown-8bit` is routine in bounce traffic) falls back to its
+transfer-decoded bytes rather than failing the whole request.
+
+Decoded content is capped by `app.mailhog.max-content-chars` (default `100000`, override with
+the `mailhog-max-content-chars` environment variable). The cap is one allowance for the whole
+message rather than per piece — the bodies are filled first, then the remaining parts — so a
+message with many parts cannot return a multiple of the limit.
+
+#### Example
+
+```bash
+curl http://localhost:8080/api/email/messages/abc123/content \
+  -H "version: 1"
+```
+
+---
+
 ## MCP Tools
 
 The service registers the following tools with the MCP (Model Context Protocol) server. They mirror the REST API and share the same underlying `EmailSendService`.
@@ -526,6 +585,52 @@ Created: {created}
 
 Subject falls back to `(no subject)` if the header is absent.
 
+This tool returns metadata only. Use `getMailhogMessageContent` to read the body.
+
+---
+
+### Tool: `getMailhogMessageContent`
+
+**Description:** Get the full headers and decoded body of an email captured by MailHog by its
+message ID. Use this to read email content such as confirmation or activation links.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `id` | string | Yes | The MailHog message ID |
+
+**Returns:** A plain-text block:
+
+```
+Message ID: {id}
+
+--- Headers ---
+{Name}: {value}
+...
+
+--- Body (text/plain) ---
+{decoded plain-text body}
+
+--- Body (text/html) ---
+{decoded html body}
+
+--- Part (message/delivery-status) ---
+{decoded part content}
+
+--- Attachments ---
+{filename} ({contentType}, {size} bytes)
+```
+
+Body, part, and attachment sections are omitted when the message has none; if neither body part
+is present, the body section reads `(no text or html body)`. Bodies are transfer-decoded, so
+quoted-printable and base64 content is readable and URLs are not split across lines. Header
+values are unfolded and RFC 2047 decoded. A `--- Part ---` section appears for each textual leaf
+that is neither body nor attachment — reading a mocked bounce this way surfaces the DSN's
+`Status`, `Action`, and `Diagnostic-Code`. Attachment content is never inlined — only its
+metadata is listed. Decoded content beyond `app.mailhog.max-content-chars` — one allowance
+shared by the bodies and parts — is cut and marked with `...[truncated]`.
+
 ---
 
 ### Tool: `deleteMailhogMessage`
@@ -554,6 +659,7 @@ Subject falls back to `(no subject)` if the header is absent.
 | `spring.mail.properties.mail.smtp.starttls.enable` | `mail-smtp-starttls-enable` | Enable STARTTLS | Boolean | `false` | No |
 | `app.permissions` | `permissions-file` | Path to the permissions file. Supports Spring resource prefixes (`classpath:`, `file:`). | String | `classpath:permissions.yaml` | No |
 | `app.mailhog.url` | `mailhog-url` | URL of the MailHog server to query for email retrieval and search | String | `http://localhost:8025` | No |
+| `app.mailhog.max-content-chars` | `mailhog-max-content-chars` | Total decoded characters returned for one captured email; bodies and parts share this allowance and content beyond it is truncated | Integer | `100000` | No |
 | `app.bounce.mailer-daemon` | `bounce-mailer-daemon` | Sender (`From`) address used for mocked bounces. Must be allowed by the `from` permission block. | String | `MAILER-DAEMON@mail.duotail.test` | No |
 | `app.bounce.reporting-mta` | `bounce-reporting-mta` | Value emitted in the DSN `Reporting-MTA` field when a request does not supply one | String | `dns; mail.duotail.test` | No |
 | `app.bounce.reverse-path` | `bounce-reverse-path` | SMTP `MAIL FROM` (envelope reverse-path) for mocked bounces. `<>` (the null sender) is required for a DSN to be recognized as a bounce; override to a real address if the target MTA rejects an empty reverse-path. | String | `<>` | No |
