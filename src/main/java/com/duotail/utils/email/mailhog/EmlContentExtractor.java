@@ -152,9 +152,11 @@ public class EmlContentExtractor {
         return Part.ATTACHMENT.equalsIgnoreCase(part.getDisposition()) || part.getFileName() != null;
     }
 
-    private boolean isTextual(Part part) throws MessagingException {
-        return part.isMimeType("text/*") || part.isMimeType("message/*");
-    }
+private boolean isTextual(Part part) throws MessagingException {
+    return part.isMimeType("text/*")
+            || part.isMimeType("message/delivery-status")
+            || part.isMimeType("message/rfc822-headers");
+}
 
     private String baseContentType(Part part) throws MessagingException {
         var contentType = part.getContentType();
