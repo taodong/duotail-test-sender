@@ -174,8 +174,11 @@ public class McpToolService {
         var otherParts = content.otherParts();
         if (otherParts != null) {
             for (var part : otherParts) {
-                sb.append("\n--- Part (").append(part.contentType()).append(") ---\n")
-                        .append(part.content()).append("\n");
+                // The part is still worth announcing even when it could not be decoded, but say so
+                // rather than printing a bare "null" that reads like a bug
+                sb.append("\n--- Part (").append(orUnknown(part.contentType())).append(") ---\n")
+                        .append(part.content() == null ? "(content unavailable)" : part.content())
+                        .append("\n");
             }
         }
 
@@ -183,12 +186,16 @@ public class McpToolService {
         if (attachments != null && !attachments.isEmpty()) {
             sb.append("\n--- Attachments ---\n");
             for (var attachment : attachments) {
-                sb.append(attachment.filename())
-                        .append(" (").append(attachment.contentType())
+                sb.append(attachment.filename() == null ? "(unnamed)" : attachment.filename())
+                        .append(" (").append(orUnknown(attachment.contentType()))
                         .append(", ").append(attachment.size()).append(" bytes)\n");
             }
         }
         return sb.toString();
+    }
+
+    private String orUnknown(String contentType) {
+        return contentType == null ? "unknown type" : contentType;
     }
 
     private String extractSubject(java.util.Map<String, List<String>> headers) {

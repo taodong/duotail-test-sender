@@ -41,10 +41,10 @@ public class EmlContentExtractor {
 
     private static final String TRUNCATION_MARKER = "\n...[truncated]";
 
-    private final int maxBodyChars;
+    private final int maxContentChars;
 
-    public EmlContentExtractor(@Value("${app.mailhog.max-body-chars:100000}") int maxBodyChars) {
-        this.maxBodyChars = maxBodyChars;
+    public EmlContentExtractor(@Value("${app.mailhog.max-content-chars:100000}") int maxContentChars) {
+        this.maxContentChars = maxContentChars;
     }
 
     public EmailContent extract(String id, byte[] eml) {
@@ -68,17 +68,25 @@ public class EmlContentExtractor {
             LOG.warn("Failed to walk MIME parts for MailHog message id={}; returning partial content", id, e);
         }
 
-        // Truncate before reading the flag: truncate() is what sets it
-        var textBody = truncate(accumulator.textBody, accumulator);
-        var htmlBody = truncate(accumulator.htmlBody, accumulator);
+        // One budget for everything decoded, spent in priority order: the bodies a caller usually
+        // wants first, then the remaining parts. Capping each piece separately would let a message
+        // with many parts return an arbitrary multiple of the configured limit.
+        var budget = new Budget(maxContentChars);
+        var textBody = budget.take(accumulator.textBody);
+        var htmlBody = budget.take(accumulator.htmlBody);
+        var otherParts = new ArrayList<EmailPart>(accumulator.otherParts.size());
+        for (var part : accumulator.otherParts) {
+            otherParts.add(new EmailPart(part.contentType(), budget.take(part.content())));
+        }
+
         return new EmailContent(
                 id,
                 accumulator.headers,
                 textBody,
                 htmlBody,
                 accumulator.attachments,
-                accumulator.otherParts,
-                accumulator.truncated);
+                otherParts,
+                budget.truncated());
     }
 
     private void collectHeaders(MimeMessage message, Accumulator accumulator) throws MessagingException {
@@ -140,8 +148,7 @@ public class EmlContentExtractor {
         // their content — for a mocked bounce those are the Status and Diagnostic-Code fields that
         // are the entire reason to inspect the message.
         if (isTextual(part)) {
-            accumulator.otherParts.add(new EmailPart(
-                    baseContentType(part), truncate(decodeText(part), accumulator)));
+            accumulator.otherParts.add(new EmailPart(baseContentType(part), decodeText(part)));
         } else {
             accumulator.attachments.add(new EmailAttachment(
                     part.getFileName(), baseContentType(part), part.getSize()));
@@ -185,7 +192,10 @@ private boolean isTextual(Part part) throws MessagingException {
             LOG.debug("Content handler could not decode part, falling back to raw bytes", e);
         }
         try (var stream = part.getInputStream()) {
-            return readAll(stream, StandardCharsets.UTF_8);
+            // ISO-8859-1, not UTF-8: this path runs precisely because the declared charset was
+            // unusable, so any guess is wrong. Latin-1 maps every byte to a character, keeping the
+            // content recoverable, where UTF-8 would replace malformed sequences with U+FFFD.
+            return readAll(stream, StandardCharsets.ISO_8859_1);
         } catch (MessagingException | IOException e) {
             LOG.warn("Could not read part content", e);
             return null;
@@ -196,12 +206,32 @@ private boolean isTextual(Part part) throws MessagingException {
         return new String(stream.readAllBytes(), charset);
     }
 
-    private String truncate(String body, Accumulator accumulator) {
-        if (body == null || body.length() <= maxBodyChars) {
-            return body;
+    /**
+     * A shared character allowance for everything decoded out of one message, so the total returned
+     * is bounded no matter how many parts the message carries.
+     */
+    private static final class Budget {
+        private int remaining;
+        private boolean truncated;
+
+        private Budget(int limit) {
+            this.remaining = Math.max(limit, 0);
         }
-        accumulator.truncated = true;
-        return body.substring(0, maxBodyChars) + TRUNCATION_MARKER;
+
+        private String take(String text) {
+            if (text == null || text.length() <= remaining) {
+                remaining -= text == null ? 0 : text.length();
+                return text;
+            }
+            var kept = text.substring(0, remaining);
+            remaining = 0;
+            truncated = true;
+            return kept + TRUNCATION_MARKER;
+        }
+
+        private boolean truncated() {
+            return truncated;
+        }
     }
 
     /**
@@ -213,6 +243,5 @@ private boolean isTextual(Part part) throws MessagingException {
         private final List<EmailPart> otherParts = new ArrayList<>();
         private String textBody;
         private String htmlBody;
-        private boolean truncated;
     }
 }

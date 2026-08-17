@@ -423,15 +423,17 @@ URL arrives intact rather than split across lines with `=3D` escapes.
 | `htmlBody` | string \| null | Decoded `text/html` part, or `null` if absent |
 | `attachments` | array of `{ filename, contentType, size }` | Attachment metadata only — content is never inlined |
 | `otherParts` | array of `{ contentType, content }` | Textual leaf parts that are neither body nor attachment — most importantly the `message/delivery-status` and `message/rfc822-headers` parts of a DSN, which carry `Status`, `Action`, and `Diagnostic-Code` |
-| `truncated` | boolean | `true` if a body exceeded `app.mailhog.max-body-chars` and was cut |
+| `truncated` | boolean | `true` if the decoded content exceeded `app.mailhog.max-content-chars` and was cut |
 
 Header values are unfolded and RFC 2047 decoded, so an encoded `Subject` such as
 `=?UTF-8?B?QmVzdMOkdGlndW5n?=` is returned as readable text. A part that cannot be decoded
 (an unknown charset like `unknown-8bit` is routine in bounce traffic) falls back to its
 transfer-decoded bytes rather than failing the whole request.
 
-Body size is capped by `app.mailhog.max-body-chars` (default `100000`, override with the
-`mailhog-max-body-chars` environment variable).
+Decoded content is capped by `app.mailhog.max-content-chars` (default `100000`, override with
+the `mailhog-max-content-chars` environment variable). The cap is one allowance for the whole
+message rather than per piece — the bodies are filled first, then the remaining parts — so a
+message with many parts cannot return a multiple of the limit.
 
 #### Example
 
@@ -626,8 +628,8 @@ quoted-printable and base64 content is readable and URLs are not split across li
 values are unfolded and RFC 2047 decoded. A `--- Part ---` section appears for each textual leaf
 that is neither body nor attachment — reading a mocked bounce this way surfaces the DSN's
 `Status`, `Action`, and `Diagnostic-Code`. Attachment content is never inlined — only its
-metadata is listed. Bodies longer than `app.mailhog.max-body-chars` are cut and marked with
-`...[truncated]`.
+metadata is listed. Decoded content beyond `app.mailhog.max-content-chars` — one allowance
+shared by the bodies and parts — is cut and marked with `...[truncated]`.
 
 ---
 
@@ -657,7 +659,7 @@ metadata is listed. Bodies longer than `app.mailhog.max-body-chars` are cut and 
 | `spring.mail.properties.mail.smtp.starttls.enable` | `mail-smtp-starttls-enable` | Enable STARTTLS | Boolean | `false` | No |
 | `app.permissions` | `permissions-file` | Path to the permissions file. Supports Spring resource prefixes (`classpath:`, `file:`). | String | `classpath:permissions.yaml` | No |
 | `app.mailhog.url` | `mailhog-url` | URL of the MailHog server to query for email retrieval and search | String | `http://localhost:8025` | No |
-| `app.mailhog.max-body-chars` | `mailhog-max-body-chars` | Per-body character cap when decoding a captured email; longer bodies are truncated | Integer | `100000` | No |
+| `app.mailhog.max-content-chars` | `mailhog-max-content-chars` | Total decoded characters returned for one captured email; bodies and parts share this allowance and content beyond it is truncated | Integer | `100000` | No |
 | `app.bounce.mailer-daemon` | `bounce-mailer-daemon` | Sender (`From`) address used for mocked bounces. Must be allowed by the `from` permission block. | String | `MAILER-DAEMON@mail.duotail.test` | No |
 | `app.bounce.reporting-mta` | `bounce-reporting-mta` | Value emitted in the DSN `Reporting-MTA` field when a request does not supply one | String | `dns; mail.duotail.test` | No |
 | `app.bounce.reverse-path` | `bounce-reverse-path` | SMTP `MAIL FROM` (envelope reverse-path) for mocked bounces. `<>` (the null sender) is required for a DSN to be recognized as a bounce; override to a real address if the target MTA rejects an empty reverse-path. | String | `<>` | No |

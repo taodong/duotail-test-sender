@@ -7,6 +7,7 @@ import com.duotail.utils.email.mailhog.MailhogUnavailableException;
 import com.duotail.utils.email.mailhog.dto.EmailAttachment;
 import com.duotail.utils.email.mailhog.dto.EmailContent;
 import com.duotail.utils.email.mailhog.dto.EmailHeader;
+import com.duotail.utils.email.mailhog.dto.EmailPart;
 import com.duotail.utils.email.mailhog.dto.MailhogContent;
 import com.duotail.utils.email.mailhog.dto.MailhogMessage;
 import com.duotail.utils.email.mailhog.dto.MailhogPageResponse;
@@ -366,6 +367,28 @@ class McpToolServiceTest {
         var result = mcpToolService.getMailhogMessageContent("abc123");
 
         assertTrue(result.contains("(no text or html body)"));
+    }
+
+    @Test
+    void getMailhogMessageContentRendersUndecodablePartsWithoutPrintingNull() {
+        var eml = RAW_EML.getBytes(StandardCharsets.UTF_8);
+        when(mailhogService.getMessageEml("abc123")).thenReturn(eml);
+        when(emlContentExtractor.extract("abc123", eml)).thenReturn(new EmailContent(
+                "abc123",
+                List.of(new EmailHeader("Subject", "Odd Parts")),
+                "plain body",
+                null,
+                List.of(new EmailAttachment(null, null, 512)),
+                List.of(new EmailPart("message/delivery-status", null)),
+                false));
+
+        var result = mcpToolService.getMailhogMessageContent("abc123");
+
+        assertFalse(result.contains("null"), "a bare null reads like a bug: " + result);
+        assertTrue(result.contains("--- Part (message/delivery-status) ---"),
+                "the part is still worth announcing");
+        assertTrue(result.contains("(content unavailable)"));
+        assertTrue(result.contains("(unnamed) (unknown type, 512 bytes)"));
     }
 
     @Test

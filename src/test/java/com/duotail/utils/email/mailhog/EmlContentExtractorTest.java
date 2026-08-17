@@ -168,6 +168,65 @@ class EmlContentExtractorTest {
     }
 
     /**
+     * The cap is an allowance for the whole message, not for each piece: a message with many parts
+     * must not return an arbitrary multiple of the configured limit.
+     */
+    @Test
+    void sharesOneAllowanceAcrossBodiesAndParts() {
+        var smallCapExtractor = new EmlContentExtractor(30);
+        var eml = eml(
+                "Subject: Many Parts",
+                "MIME-Version: 1.0",
+                "Content-Type: multipart/report; report-type=delivery-status; boundary=\"BOUND\"",
+                "",
+                "--BOUND",
+                "Content-Type: text/plain; charset=UTF-8",
+                "",
+                "AAAAAAAAAAAAAAAAAAAA",
+                "--BOUND",
+                "Content-Type: message/delivery-status",
+                "",
+                "BBBBBBBBBBBBBBBBBBBB",
+                "--BOUND",
+                "Content-Type: message/rfc822-headers",
+                "",
+                "CCCCCCCCCCCCCCCCCCCC",
+                "--BOUND--");
+
+        var content = smallCapExtractor.extract("abc123", eml);
+
+        assertTrue(content.truncated());
+        var decoded = content.textBody().length()
+                + content.otherParts().stream()
+                        .map(p -> p.content() == null ? "" : p.content())
+                        .mapToInt(String::length)
+                        .sum();
+        var markerAllowance = content.otherParts().size() + 1;
+        assertTrue(decoded <= 30 + markerAllowance * "\n...[truncated]".length(),
+                "total decoded content must stay within one allowance, was " + decoded);
+        assertTrue(content.textBody().startsWith("AAAA"), "bodies get the allowance first");
+    }
+
+    @Test
+    void fallbackDecodingPreservesBytesRatherThanReplacingThem() {
+        // 0xE9 is 'é' in latin-1 but an invalid UTF-8 sequence on its own; under an unusable
+        // charset the byte must survive rather than becoming U+FFFD
+        var header = String.join("\r\n",
+                "Subject: Latin1",
+                "Content-Type: text/plain; charset=\"unknown-8bit\"",
+                "",
+                "caf");
+        var bytes = new byte[header.getBytes(StandardCharsets.UTF_8).length + 1];
+        System.arraycopy(header.getBytes(StandardCharsets.UTF_8), 0, bytes, 0, bytes.length - 1);
+        bytes[bytes.length - 1] = (byte) 0xE9;
+
+        var content = extractor.extract("abc123", bytes);
+
+        assertEquals("café", content.textBody());
+        assertFalse(content.textBody().contains("�"), "bytes must not be replaced");
+    }
+
+    /**
      * BounceEmailService builds DSN parts with a bare DataHandler — no filename and no
      * Content-Disposition — so they are neither attachments nor text bodies. They must still come
      * back: Status, Action and Diagnostic-Code are the whole reason to inspect a bounce.
