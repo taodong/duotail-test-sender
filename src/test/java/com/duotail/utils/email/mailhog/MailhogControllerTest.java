@@ -215,6 +215,7 @@ class MailhogControllerTest {
                 "plain body",
                 "<p>html body</p>",
                 List.of(new EmailAttachment("invoice.pdf", "application/pdf", 1024)),
+                List.of(),
                 false));
 
         mockMvc.perform(get("/api/email/messages/abc123/content").header("version", "1"))

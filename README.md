@@ -422,7 +422,13 @@ URL arrives intact rather than split across lines with `=3D` escapes.
 | `textBody` | string \| null | Decoded `text/plain` part, or `null` if absent |
 | `htmlBody` | string \| null | Decoded `text/html` part, or `null` if absent |
 | `attachments` | array of `{ filename, contentType, size }` | Attachment metadata only — content is never inlined |
+| `otherParts` | array of `{ contentType, content }` | Textual leaf parts that are neither body nor attachment — most importantly the `message/delivery-status` and `message/rfc822-headers` parts of a DSN, which carry `Status`, `Action`, and `Diagnostic-Code` |
 | `truncated` | boolean | `true` if a body exceeded `app.mailhog.max-body-chars` and was cut |
+
+Header values are unfolded and RFC 2047 decoded, so an encoded `Subject` such as
+`=?UTF-8?B?QmVzdMOkdGlndW5n?=` is returned as readable text. A part that cannot be decoded
+(an unknown charset like `unknown-8bit` is routine in bounce traffic) falls back to its
+transfer-decoded bytes rather than failing the whole request.
 
 Body size is capped by `app.mailhog.max-body-chars` (default `100000`, override with the
 `mailhog-max-body-chars` environment variable).
@@ -607,15 +613,21 @@ Message ID: {id}
 --- Body (text/html) ---
 {decoded html body}
 
+--- Part (message/delivery-status) ---
+{decoded part content}
+
 --- Attachments ---
 {filename} ({contentType}, {size} bytes)
 ```
 
-Body and attachment sections are omitted when the message has none; if neither body part is
-present, the body section reads `(no text or html body)`. Bodies are transfer-decoded, so
-quoted-printable and base64 content is readable and URLs are not split across lines. Attachment
-content is never inlined — only its metadata is listed. Bodies longer than
-`app.mailhog.max-body-chars` are cut and marked with `...[truncated]`.
+Body, part, and attachment sections are omitted when the message has none; if neither body part
+is present, the body section reads `(no text or html body)`. Bodies are transfer-decoded, so
+quoted-printable and base64 content is readable and URLs are not split across lines. Header
+values are unfolded and RFC 2047 decoded. A `--- Part ---` section appears for each textual leaf
+that is neither body nor attachment — reading a mocked bounce this way surfaces the DSN's
+`Status`, `Action`, and `Diagnostic-Code`. Attachment content is never inlined — only its
+metadata is listed. Bodies longer than `app.mailhog.max-body-chars` are cut and marked with
+`...[truncated]`.
 
 ---
 

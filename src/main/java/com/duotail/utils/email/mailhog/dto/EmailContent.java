@@ -12,5 +12,6 @@ public record EmailContent(
         String textBody,
         String htmlBody,
         List<EmailAttachment> attachments,
+        List<EmailPart> otherParts,
         boolean truncated
 ) {}

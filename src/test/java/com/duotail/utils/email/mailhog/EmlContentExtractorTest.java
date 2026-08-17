@@ -1,5 +1,7 @@
 package com.duotail.utils.email.mailhog;
 
+import com.duotail.utils.email.mailhog.dto.EmailContent;
+import com.duotail.utils.email.mailhog.dto.EmailHeader;
 import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
@@ -165,6 +167,114 @@ class EmlContentExtractorTest {
         assertFalse(content.textBody().contains("ABCDEFGHIJ"));
     }
 
+    /**
+     * BounceEmailService builds DSN parts with a bare DataHandler — no filename and no
+     * Content-Disposition — so they are neither attachments nor text bodies. They must still come
+     * back: Status, Action and Diagnostic-Code are the whole reason to inspect a bounce.
+     */
+    @Test
+    void keepsDeliveryStatusPartsOfADsnBounce() {
+        var eml = eml(
+                "Subject: Undelivered Mail Returned to Sender",
+                "MIME-Version: 1.0",
+                "Content-Type: multipart/report; report-type=delivery-status; boundary=\"BOUND\"",
+                "",
+                "--BOUND",
+                "Content-Type: text/plain; charset=UTF-8",
+                "",
+                "Your message failed permanently.",
+                "--BOUND",
+                "Content-Type: message/delivery-status",
+                "",
+                "Reporting-MTA: dns; mail.duotail.test",
+                "",
+                "Final-Recipient: rfc822; bounce@enduser1.com",
+                "Action: failed",
+                "Status: 5.1.1",
+                "Diagnostic-Code: smtp; 550 5.1.1 User unknown",
+                "--BOUND",
+                "Content-Type: message/rfc822-headers",
+                "",
+                "From: sender@duotail.com",
+                "Subject: Original Subject",
+                "--BOUND--");
+
+        var content = extractor.extract("abc123", eml);
+
+        assertTrue(content.textBody().contains("failed permanently"));
+        assertEquals(2, content.otherParts().size(), "both DSN parts must be kept");
+
+        var deliveryStatus = content.otherParts().getFirst();
+        assertEquals("message/delivery-status", deliveryStatus.contentType());
+        assertTrue(deliveryStatus.content().contains("Status: 5.1.1"));
+        assertTrue(deliveryStatus.content().contains("Action: failed"));
+        assertTrue(deliveryStatus.content().contains("Diagnostic-Code: smtp; 550 5.1.1 User unknown"));
+
+        var originalHeaders = content.otherParts().get(1);
+        assertEquals("message/rfc822-headers", originalHeaders.contentType());
+        assertTrue(originalHeaders.content().contains("Subject: Original Subject"));
+    }
+
+    @Test
+    void keepsHeadersAndOtherPartsWhenOnePartHasAnUnknownCharset() {
+        var eml = eml(
+                "Subject: Mixed Charsets",
+                "MIME-Version: 1.0",
+                "Content-Type: multipart/alternative; boundary=\"BOUND\"",
+                "",
+                "--BOUND",
+                "Content-Type: text/plain; charset=\"unknown-8bit\"",
+                "",
+                "body with an unknown charset",
+                "--BOUND",
+                "Content-Type: text/html; charset=UTF-8",
+                "",
+                "<p>html still readable</p>",
+                "--BOUND--");
+
+        var content = extractor.extract("abc123", eml);
+
+        assertTrue(content.headers().stream()
+                        .anyMatch(h -> h.name().equals("Subject") && h.value().equals("Mixed Charsets")),
+                "an undecodable part must not cost the caller the headers");
+        assertTrue(content.htmlBody().contains("html still readable"),
+                "an undecodable part must not cost the caller the other parts");
+        assertTrue(content.textBody().contains("body with an unknown charset"),
+                "the undecodable part falls back to its transfer-decoded bytes");
+    }
+
+    @Test
+    void decodesRfc2047EncodedHeaderValues() {
+        var eml = eml(
+                "Subject: =?UTF-8?B?W1Rlc3RdIEJlc3TDpHRpZ3VuZw==?=",
+                "From: sender@example.com",
+                "Content-Type: text/plain; charset=UTF-8",
+                "",
+                "body");
+
+        var content = extractor.extract("abc123", eml);
+
+        assertEquals("[Test] Bestätigung", headerValue(content, "Subject"));
+    }
+
+    @Test
+    void unfoldsHeadersSoEachOccupiesOneLine() {
+        var eml = eml(
+                "Received: from mac.lan by mailhog.example (MailHog)",
+                "          id abc123; Mon, 17 Aug 2026 06:53:03 +0000",
+                "Subject: Folded Header",
+                "",
+                "body");
+
+        var content = extractor.extract("abc123", eml);
+
+        var received = headerValue(content, "Received");
+        assertFalse(received.contains("\n"), "folded header must not keep its line break: " + received);
+        assertFalse(received.contains("\r"), "folded header must not keep its line break: " + received);
+        assertTrue(received.contains("mailhog.example"));
+        assertTrue(received.contains("id abc123"));
+    }
+
     @Test
     void handlesMessageWithNoBodyParts() {
         var eml = eml(
@@ -182,5 +292,13 @@ class EmlContentExtractorTest {
 
     private byte[] eml(String... lines) {
         return String.join("\r\n", lines).getBytes(StandardCharsets.UTF_8);
+    }
+
+    private String headerValue(EmailContent content, String name) {
+        return content.headers().stream()
+                .filter(h -> h.name().equals(name))
+                .map(EmailHeader::value)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("no " + name + " header"));
     }
 }

@@ -171,6 +171,14 @@ public class McpToolService {
             sb.append("\n--- Body ---\n(no text or html body)\n");
         }
 
+        var otherParts = content.otherParts();
+        if (otherParts != null) {
+            for (var part : otherParts) {
+                sb.append("\n--- Part (").append(part.contentType()).append(") ---\n")
+                        .append(part.content()).append("\n");
+            }
+        }
+
         var attachments = content.attachments();
         if (attachments != null && !attachments.isEmpty()) {
             sb.append("\n--- Attachments ---\n");

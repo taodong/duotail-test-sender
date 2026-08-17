@@ -319,6 +319,7 @@ class McpToolServiceTest {
                 "plain body",
                 "<p>html body</p>",
                 List.of(new EmailAttachment("invoice.pdf", "application/pdf", 1024)),
+                List.of(),
                 false));
 
         var result = mcpToolService.getMailhogMessageContent("abc123");
@@ -345,6 +346,7 @@ class McpToolServiceTest {
                 "plain body",
                 null,
                 List.of(),
+                List.of(),
                 false));
 
         var result = mcpToolService.getMailhogMessageContent("abc123");
@@ -359,7 +361,7 @@ class McpToolServiceTest {
         var eml = RAW_EML.getBytes(StandardCharsets.UTF_8);
         when(mailhogService.getMessageEml("abc123")).thenReturn(eml);
         when(emlContentExtractor.extract("abc123", eml)).thenReturn(new EmailContent(
-                "abc123", List.of(new EmailHeader("Subject", "No Body")), null, null, List.of(), false));
+                "abc123", List.of(new EmailHeader("Subject", "No Body")), null, null, List.of(), List.of(), false));
 
         var result = mcpToolService.getMailhogMessageContent("abc123");
 
