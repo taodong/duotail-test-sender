@@ -83,6 +83,36 @@ public class MailhogService {
         }
     }
 
+    /**
+     * Fetches the raw RFC-822 message as MailHog serves it from
+     * {@code /api/v1/messages/{id}/download} (Content-Type {@code message/rfc822}).
+     * Returned as bytes so the charset is decided by the MIME parser rather than the HTTP client.
+     */
+    public byte[] getMessageEml(String id) {
+        try {
+            LOG.info("Downloading raw eml from MailHog with id={}", id);
+            var eml = restClient.get()
+                    .uri("/api/v1/messages/{id}/download", id)
+                    .retrieve()
+                    .body(byte[].class);
+            if (eml == null || eml.length == 0) {
+                throw new MailhogMessageNotFoundException(id);
+            }
+            return eml;
+        } catch (HttpClientErrorException.NotFound e) {
+            throw new MailhogMessageNotFoundException(id);
+        } catch (RestClientException e) {
+            // For an unknown id MailHog's /download closes the connection without writing any
+            // response, so a bad id arrives here as a transport error rather than a 404. Probe the
+            // metadata endpoint to tell "unknown id" apart from "MailHog is down" — reporting an
+            // outage for what is really a mistyped id is the confusion this feature exists to end.
+            getMessage(id);
+            logMailhogError(mailhogUrl, e);
+            throw new MailhogUnavailableException(
+                    "MailHog is unavailable at " + mailhogUrl + ": " + e.getMessage(), e);
+        }
+    }
+
     public void deleteMessage(String id) {
         try {
             LOG.info("Deleting message from MailHog with id={}", id);

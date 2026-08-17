@@ -1,6 +1,8 @@
 package com.duotail.utils.email.sender.mcp;
 
+import com.duotail.utils.email.mailhog.EmlContentExtractor;
 import com.duotail.utils.email.mailhog.MailhogService;
+import com.duotail.utils.email.mailhog.dto.EmailContent;
 import com.duotail.utils.email.mailhog.dto.MailhogPageResponse;
 import com.duotail.utils.email.mailhog.dto.MailhogPath;
 import com.duotail.utils.email.sender.BounceEmailService;
@@ -25,13 +27,16 @@ public class McpToolService {
     private final EmailSendService emailSendService;
     private final BounceEmailService bounceEmailService;
     private final MailhogService mailhogService;
+    private final EmlContentExtractor emlContentExtractor;
 
     public McpToolService(EmailSendService emailSendService,
                           BounceEmailService bounceEmailService,
-                          MailhogService mailhogService) {
+                          MailhogService mailhogService,
+                          EmlContentExtractor emlContentExtractor) {
         this.emailSendService = emailSendService;
         this.bounceEmailService = bounceEmailService;
         this.mailhogService = mailhogService;
+        this.emlContentExtractor = emlContentExtractor;
     }
 
     @McpTool(description = "Send one HTML email using a structured request object")
@@ -105,6 +110,14 @@ public class McpToolService {
                 "Created: " + msg.created();
     }
 
+    @McpTool(description = "Get the full headers and decoded body of an email captured by MailHog by its message ID. "
+            + "Use this to read email content such as confirmation or activation links.")
+    public String getMailhogMessageContent(
+            @McpToolParam(description = "The MailHog message ID") String id
+    ) {
+        return formatContent(emlContentExtractor.extract(id, mailhogService.getMessageEml(id)));
+    }
+
     @McpTool(description = "Delete a specific email captured by MailHog by its message ID.")
     public String deleteMailhogMessage(
             @McpToolParam(description = "The MailHog message ID") String id
@@ -136,6 +149,36 @@ public class McpToolService {
                     .append(" | To: ").append(to)
                     .append(" | Created: ").append(msg.created())
                     .append(" | ID: ").append(msg.id()).append("\n");
+        }
+        return sb.toString();
+    }
+
+    private String formatContent(EmailContent content) {
+        var sb = new StringBuilder("Message ID: ").append(content.id()).append("\n");
+
+        sb.append("\n--- Headers ---\n");
+        for (var header : content.headers()) {
+            sb.append(header.name()).append(": ").append(header.value()).append("\n");
+        }
+
+        if (content.textBody() != null) {
+            sb.append("\n--- Body (text/plain) ---\n").append(content.textBody()).append("\n");
+        }
+        if (content.htmlBody() != null) {
+            sb.append("\n--- Body (text/html) ---\n").append(content.htmlBody()).append("\n");
+        }
+        if (content.textBody() == null && content.htmlBody() == null) {
+            sb.append("\n--- Body ---\n(no text or html body)\n");
+        }
+
+        var attachments = content.attachments();
+        if (attachments != null && !attachments.isEmpty()) {
+            sb.append("\n--- Attachments ---\n");
+            for (var attachment : attachments) {
+                sb.append(attachment.filename())
+                        .append(" (").append(attachment.contentType())
+                        .append(", ").append(attachment.size()).append(" bytes)\n");
+            }
         }
         return sb.toString();
     }

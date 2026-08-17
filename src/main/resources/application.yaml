@@ -26,6 +26,9 @@ app:
   permissions: ${permissions-file:classpath:permissions.yaml}
   mailhog:
     url: ${mailhog-url:http://localhost:8025}
+    # Per-body character cap when decoding a captured email, so a large attachment or
+    # inline payload cannot blow up an MCP response. Bodies beyond it are truncated.
+    max-body-chars: ${mailhog-max-body-chars:100000}
   bounce:
     mailer-daemon: ${bounce-mailer-daemon:MAILER-DAEMON@mail.duotail.test}
     reporting-mta: ${bounce-reporting-mta:dns; mail.duotail.test}

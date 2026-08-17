@@ -1,8 +1,12 @@
 package com.duotail.utils.email.sender.mcp;
 
+import com.duotail.utils.email.mailhog.EmlContentExtractor;
 import com.duotail.utils.email.mailhog.MailhogMessageNotFoundException;
 import com.duotail.utils.email.mailhog.MailhogService;
 import com.duotail.utils.email.mailhog.MailhogUnavailableException;
+import com.duotail.utils.email.mailhog.dto.EmailAttachment;
+import com.duotail.utils.email.mailhog.dto.EmailContent;
+import com.duotail.utils.email.mailhog.dto.EmailHeader;
 import com.duotail.utils.email.mailhog.dto.MailhogContent;
 import com.duotail.utils.email.mailhog.dto.MailhogMessage;
 import com.duotail.utils.email.mailhog.dto.MailhogPageResponse;
@@ -45,11 +49,14 @@ class McpToolServiceTest {
     @Mock
     private MailhogService mailhogService;
 
+    @Mock
+    private EmlContentExtractor emlContentExtractor;
+
     private McpToolService mcpToolService;
 
     @BeforeEach
     void setUp() {
-        mcpToolService = new McpToolService(emailSendService, bounceEmailService, mailhogService);
+        mcpToolService = new McpToolService(emailSendService, bounceEmailService, mailhogService, emlContentExtractor);
     }
 
     @Test
@@ -299,6 +306,73 @@ class McpToolServiceTest {
 
         assertThrows(MailhogMessageNotFoundException.class,
                 () -> mcpToolService.getMailhogMessage("missing"));
+    }
+
+    @Test
+    void getMailhogMessageContentFormatsHeadersBodiesAndAttachments() {
+        var eml = RAW_EML.getBytes(StandardCharsets.UTF_8);
+        when(mailhogService.getMessageEml("abc123")).thenReturn(eml);
+        when(emlContentExtractor.extract("abc123", eml)).thenReturn(new EmailContent(
+                "abc123",
+                List.of(new EmailHeader("Subject", "Test Subject"),
+                        new EmailHeader("From", "sender@example.com")),
+                "plain body",
+                "<p>html body</p>",
+                List.of(new EmailAttachment("invoice.pdf", "application/pdf", 1024)),
+                false));
+
+        var result = mcpToolService.getMailhogMessageContent("abc123");
+
+        assertTrue(result.contains("Message ID: abc123"));
+        assertTrue(result.contains("--- Headers ---"));
+        assertTrue(result.contains("Subject: Test Subject"));
+        assertTrue(result.contains("From: sender@example.com"));
+        assertTrue(result.contains("--- Body (text/plain) ---"));
+        assertTrue(result.contains("plain body"));
+        assertTrue(result.contains("--- Body (text/html) ---"));
+        assertTrue(result.contains("<p>html body</p>"));
+        assertTrue(result.contains("--- Attachments ---"));
+        assertTrue(result.contains("invoice.pdf (application/pdf, 1024 bytes)"));
+    }
+
+    @Test
+    void getMailhogMessageContentOmitsAbsentSections() {
+        var eml = RAW_EML.getBytes(StandardCharsets.UTF_8);
+        when(mailhogService.getMessageEml("abc123")).thenReturn(eml);
+        when(emlContentExtractor.extract("abc123", eml)).thenReturn(new EmailContent(
+                "abc123",
+                List.of(new EmailHeader("Subject", "Plain Only")),
+                "plain body",
+                null,
+                List.of(),
+                false));
+
+        var result = mcpToolService.getMailhogMessageContent("abc123");
+
+        assertTrue(result.contains("--- Body (text/plain) ---"));
+        assertFalse(result.contains("--- Body (text/html) ---"));
+        assertFalse(result.contains("--- Attachments ---"));
+    }
+
+    @Test
+    void getMailhogMessageContentReportsWhenNoBodyPresent() {
+        var eml = RAW_EML.getBytes(StandardCharsets.UTF_8);
+        when(mailhogService.getMessageEml("abc123")).thenReturn(eml);
+        when(emlContentExtractor.extract("abc123", eml)).thenReturn(new EmailContent(
+                "abc123", List.of(new EmailHeader("Subject", "No Body")), null, null, List.of(), false));
+
+        var result = mcpToolService.getMailhogMessageContent("abc123");
+
+        assertTrue(result.contains("(no text or html body)"));
+    }
+
+    @Test
+    void getMailhogMessageContentPropagatesMailhogMessageNotFoundException() {
+        when(mailhogService.getMessageEml("missing"))
+                .thenThrow(new MailhogMessageNotFoundException("missing"));
+
+        assertThrows(MailhogMessageNotFoundException.class,
+                () -> mcpToolService.getMailhogMessageContent("missing"));
     }
 
     @Test

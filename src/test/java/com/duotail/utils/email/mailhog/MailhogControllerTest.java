@@ -1,5 +1,8 @@
 package com.duotail.utils.email.mailhog;
 
+import com.duotail.utils.email.mailhog.dto.EmailAttachment;
+import com.duotail.utils.email.mailhog.dto.EmailContent;
+import com.duotail.utils.email.mailhog.dto.EmailHeader;
 import com.duotail.utils.email.mailhog.dto.MailhogContent;
 import com.duotail.utils.email.mailhog.dto.MailhogMessage;
 import com.duotail.utils.email.mailhog.dto.MailhogPageResponse;
@@ -12,6 +15,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 
@@ -32,11 +36,14 @@ class MailhogControllerTest {
     @Mock
     private MailhogService mailhogService;
 
+    @Mock
+    private EmlContentExtractor emlContentExtractor;
+
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders.standaloneSetup(new MailhogController(mailhogService))
+        mockMvc = MockMvcBuilders.standaloneSetup(new MailhogController(mailhogService, emlContentExtractor))
                 .setControllerAdvice(new MailhogExceptionHandler())
                 .build();
     }
@@ -196,6 +203,57 @@ class MailhogControllerTest {
         mockMvc.perform(delete("/api/email/messages/missing").header("version", "1"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.message").value("MailHog message not found: missing"));
+    }
+
+    @Test
+    void getMessageContentReturnsOkWithDecodedBody() throws Exception {
+        var eml = "Subject: Test\r\n\r\nbody".getBytes(StandardCharsets.UTF_8);
+        when(mailhogService.getMessageEml("abc123")).thenReturn(eml);
+        when(emlContentExtractor.extract("abc123", eml)).thenReturn(new EmailContent(
+                "abc123",
+                List.of(new EmailHeader("Subject", "Test")),
+                "plain body",
+                "<p>html body</p>",
+                List.of(new EmailAttachment("invoice.pdf", "application/pdf", 1024)),
+                false));
+
+        mockMvc.perform(get("/api/email/messages/abc123/content").header("version", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value("abc123"))
+                .andExpect(jsonPath("$.headers[0].name").value("Subject"))
+                .andExpect(jsonPath("$.headers[0].value").value("Test"))
+                .andExpect(jsonPath("$.textBody").value("plain body"))
+                .andExpect(jsonPath("$.htmlBody").value("<p>html body</p>"))
+                .andExpect(jsonPath("$.attachments[0].filename").value("invoice.pdf"))
+                .andExpect(jsonPath("$.truncated").value(false));
+    }
+
+    @Test
+    void getMessageContentRequiresVersionHeader() throws Exception {
+        mockMvc.perform(get("/api/email/messages/abc123/content"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void getMessageContentReturnsNotFoundWhenMessageMissing() throws Exception {
+        when(mailhogService.getMessageEml("missing"))
+                .thenThrow(new MailhogMessageNotFoundException("missing"));
+
+        mockMvc.perform(get("/api/email/messages/missing/content").header("version", "1"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("MailHog message not found: missing"));
+    }
+
+    @Test
+    void getMessageContentReturnsServerErrorWhenParsingFails() throws Exception {
+        var eml = "garbage".getBytes(StandardCharsets.UTF_8);
+        when(mailhogService.getMessageEml("abc123")).thenReturn(eml);
+        when(emlContentExtractor.extract("abc123", eml))
+                .thenThrow(new MailhogMessageParseException("abc123", new RuntimeException("boom")));
+
+        mockMvc.perform(get("/api/email/messages/abc123/content").header("version", "1"))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.message").value("Failed to parse MailHog message: abc123"));
     }
 
     private MailhogMessage singleMessage(String id, String subject) {
