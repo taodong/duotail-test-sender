@@ -105,11 +105,11 @@ public class EmlContentExtractor {
         }
     }
 
-    /**
-     * Walks the MIME tree depth-first, keeping the first inline text/plain and text/html parts as
-     * the bodies, attachments as metadata, and every other leaf as an {@link EmailPart} so nothing
-     * disappears without a trace.
-     */
+/**
+ * Walks the MIME tree depth-first, keeping the first inline text/plain and text/html parts as
+ * the bodies. Attachments and other non-text leaves are recorded as metadata, and other textual
+ * leaves are recorded as an {@link EmailPart} so nothing disappears without a trace.
+ */
     private void collectParts(Part part, Accumulator accumulator) throws MessagingException, IOException {
         if (isAttachment(part)) {
             accumulator.attachments.add(new EmailAttachment(
