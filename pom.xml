@@ -10,7 +10,7 @@
 	</parent>
 	<groupId>com.duotail.utils</groupId>
 	<artifactId>email-sender</artifactId>
-	<version>0.5.1</version>
+	<version>0.6.0</version>
 	<name>email-sender</name>
 	<description>Test Email Sender</description>
 	<url/>
@@ -32,8 +32,8 @@
 		<commons-lang3.version>3.20.0</commons-lang3.version>
 		<openrewrite.maven.plugin.version>6.33.0</openrewrite.maven.plugin.version>
 		<lombok.version>1.18.44</lombok.version>
-		<spring-ai-mcp-starter.version>2.0.0-M6</spring-ai-mcp-starter.version>
-		<tomcat.version>11.0.22</tomcat.version>
+		<spring-ai-mcp-starter.version>2.0.0</spring-ai-mcp-starter.version>
+		<tomcat.version>11.0.24</tomcat.version>
 	</properties>
 	<dependencies>
 		<dependency>
