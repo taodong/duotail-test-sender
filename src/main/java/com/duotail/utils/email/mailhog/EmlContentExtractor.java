@@ -113,11 +113,11 @@ public class EmlContentExtractor {
         }
     }
 
-/**
- * Walks the MIME tree depth-first, keeping the first inline text/plain and text/html parts as
- * the bodies. Attachments and other non-text leaves are recorded as metadata, and other textual
- * leaves are recorded as an {@link EmailPart} so nothing disappears without a trace.
- */
+    /**
+     * Walks the MIME tree depth-first, keeping the first inline text/plain and text/html parts as
+     * the bodies. Attachments and other non-text leaves are recorded as metadata, and other textual
+     * leaves are recorded as an {@link EmailPart} so nothing disappears without a trace.
+     */
     private void collectParts(Part part, Accumulator accumulator) throws MessagingException, IOException {
         if (isAttachment(part)) {
             accumulator.attachments.add(new EmailAttachment(
@@ -159,11 +159,11 @@ public class EmlContentExtractor {
         return Part.ATTACHMENT.equalsIgnoreCase(part.getDisposition()) || part.getFileName() != null;
     }
 
-private boolean isTextual(Part part) throws MessagingException {
-    return part.isMimeType("text/*")
-            || part.isMimeType("message/delivery-status")
-            || part.isMimeType("message/rfc822-headers");
-}
+    private boolean isTextual(Part part) throws MessagingException {
+        return part.isMimeType("text/*")
+                || part.isMimeType("message/delivery-status")
+                || part.isMimeType("message/rfc822-headers");
+    }
 
     private String baseContentType(Part part) throws MessagingException {
         var contentType = part.getContentType();
