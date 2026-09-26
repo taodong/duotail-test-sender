@@ -19,11 +19,13 @@ import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 
 import java.io.InputStream;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 
 @Slf4j
@@ -86,7 +88,8 @@ public class EmailSendService {
         var message = new MimeMessage(Session.getDefaultInstance(properties, null), emailFile);
         applyAddressOverrides(message, from, to, cc, bcc);
         validateMimeMessagePermissions(message);
-        LOG.info("Sending email [from: {} | to: {} | subject: '{}' ] from file input stream", from, String.join(",", to), message.getSubject());
+        LOG.info("Sending email [from: {} | to: {} | subject: '{}' ] from file input stream",
+                joinAddresses(message.getFrom()), joinAddresses(message.getRecipients(Message.RecipientType.TO)), message.getSubject());
         javaMailSender.send(message);
     }
 
@@ -217,6 +220,13 @@ public class EmailSendService {
         for (Address address : addresses) {
             validateContact(address.toString(), permission, messagePrefix);
         }
+    }
+
+    private String joinAddresses(Address[] addresses) {
+        if (addresses == null) {
+            return "";
+        }
+        return Arrays.stream(addresses).map(Address::toString).collect(Collectors.joining(","));
     }
 
     private InternetAddress parseSingleAddress(String value) throws AddressException {

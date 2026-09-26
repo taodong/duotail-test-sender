@@ -186,6 +186,19 @@ class EmailSendServiceTest {
     }
 
     @Test
+    void sendEmailInFileSendsWithoutThrowingWhenNoOverridesGiven() throws Exception {
+        var eml = "From: sender@example.com\r\n"
+                + "To: receiver@example.com\r\n"
+                + "Subject: No overrides\r\n"
+                + "\r\n"
+                + "Body";
+
+        emailSendService.sendEmailInFile(new ByteArrayInputStream(eml.getBytes(StandardCharsets.UTF_8)));
+
+        verify(javaMailSender).send(any(MimeMessage.class));
+    }
+
+    @Test
     void sendEmailInFileThrowsWhenEmlRecipientIsNotAuthorized() {
         emailSendService = new EmailSendService(
                 javaMailSender,
