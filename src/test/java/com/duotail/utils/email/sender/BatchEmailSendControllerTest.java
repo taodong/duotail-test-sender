@@ -73,6 +73,20 @@ class BatchEmailSendControllerTest {
         verifyNoInteractions(emailSendService);
     }
 
+    @Test
+    void sendBatchReturnsBadRequestForMalformedItemAddress() throws Exception {
+        var batchRequest = validBatchRequest();
+        batchRequest.getEmails().getFirst().setFrom("bob");
+
+        mockMvc.perform(post("/api/emails")
+                        .header("version", "1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsBytes(batchRequest)))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(emailSendService);
+    }
+
     private BatchEmailRequest validBatchRequest() {
         var emailRequest = new EmailRequest();
         emailRequest.setFrom("sender@example.com");

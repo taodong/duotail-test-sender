@@ -14,6 +14,7 @@ import tools.jackson.databind.ObjectMapper;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -66,6 +67,37 @@ class EmailSendControllerTest {
                         .header("version", "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(emailSendService);
+    }
+
+    @Test
+    void sendEmailAcceptsDisplayNameAddresses() throws Exception {
+        var request = validRequest();
+        request.setFrom("Landscape Guy<bounce-34352353@concreteabc.com>");
+        request.setTo(java.util.Set.of("Happy Rhino <a_happy.rhino_quotes@duotail.com>", "landscape.manager1@concreteabc.com"));
+        request.setCc(java.util.Set.of("\"Doe, John\" <john@example.com>"));
+        request.setBcc(java.util.Set.of("<audit@example.com>"));
+
+        mockMvc.perform(post("/api/email")
+                        .header("version", "1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsBytes(request)))
+                .andExpect(status().isOk());
+
+        verify(emailSendService).sendEmail(any());
+    }
+
+    @Test
+    void sendEmailReturnsBadRequestForMalformedRecipient() throws Exception {
+        var request = validRequest();
+        request.setTo(java.util.Set.of("a@example.com, b@example.com"));
+
+        mockMvc.perform(post("/api/email")
+                        .header("version", "1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsBytes(request)))
                 .andExpect(status().isBadRequest());
 
         verifyNoInteractions(emailSendService);

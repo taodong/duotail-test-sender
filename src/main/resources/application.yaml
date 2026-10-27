@@ -10,6 +10,7 @@ spring:
           auth: ${mail-smtp-auth:false}
           starttls:
             enable: ${mail-smtp-starttls-enable:false}
+          sendpartial: ${mail-smtp-sendpartial:true}
   ai:
     mcp:
       server:

@@ -39,10 +39,10 @@ Send one HTML email using a structured JSON body.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `from` | `string` | Yes | Sender email address (must be a valid email format) |
-| `to` | `string[]` | Yes | One or more primary recipient email addresses |
-| `cc` | `string[]` | No | CC (carbon copy) recipient email addresses |
-| `bcc` | `string[]` | No | BCC (blind carbon copy) recipient email addresses |
+| `from` | `string` | Yes | Sender address: `address` or `Name <address>` (quote a name containing a comma: `"Doe, John" <j@example.com>`) |
+| `to` | `string[]` | Yes | One or more primary recipients, each `address` or `Name <address>` |
+| `cc` | `string[]` | No | CC (carbon copy) recipients, each `address` or `Name <address>` |
+| `bcc` | `string[]` | No | BCC (blind carbon copy) recipients, each `address` or `Name <address>` |
 | `subject` | `string` | Yes | Subject line of the email |
 | `content` | `string` | Yes | Body content of the email (HTML is supported) |
 | `extraHeaders` | `object` | No | Custom SMTP headers as key-value pairs |
@@ -456,10 +456,10 @@ The service registers the following tools with the MCP (Model Context Protocol) 
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `from` | `string` | Yes | Sender email address (must be a valid email format) |
-| `to` | `string[]` | Yes | One or more primary recipient email addresses |
-| `cc` | `string[]` | No | CC recipient email addresses |
-| `bcc` | `string[]` | No | BCC recipient email addresses |
+| `from` | `string` | Yes | Sender address: `address` or `Name <address>` (quote a name containing a comma: `"Doe, John" <j@example.com>`) |
+| `to` | `string[]` | Yes | One or more primary recipients, each `address` or `Name <address>` |
+| `cc` | `string[]` | No | CC recipients, each `address` or `Name <address>` |
+| `bcc` | `string[]` | No | BCC recipients, each `address` or `Name <address>` |
 | `subject` | `string` | Yes | Subject line of the email |
 | `content` | `string` | Yes | Body content of the email (HTML supported) |
 | `extraHeaders` | `object` | No | Custom SMTP headers as key-value pairs |
