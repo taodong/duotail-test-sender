@@ -7,11 +7,16 @@ import com.duotail.utils.email.mailhog.dto.MailhogContent;
 import com.duotail.utils.email.mailhog.dto.MailhogMessage;
 import com.duotail.utils.email.mailhog.dto.MailhogPageResponse;
 import com.duotail.utils.email.mailhog.dto.MailhogPath;
+import com.duotail.utils.email.mailhog.dto.MailhogReplyRequest;
+import com.duotail.utils.email.sender.PermissionExceptionHandler;
+import com.duotail.utils.email.sender.permission.PermissionException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
@@ -19,19 +24,29 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @ExtendWith(MockitoExtension.class)
 class MailhogControllerTest {
+
+    private static final String REPLY_JSON = "{\"from\": \"bob@example.com\", \"content\": \"<p>Thanks!</p>\"}";
 
     @Mock
     private MailhogService mailhogService;
@@ -39,12 +54,15 @@ class MailhogControllerTest {
     @Mock
     private EmlContentExtractor emlContentExtractor;
 
+    @Mock
+    private MailhogReplyService mailhogReplyService;
+
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders.standaloneSetup(new MailhogController(mailhogService, emlContentExtractor))
-                .setControllerAdvice(new MailhogExceptionHandler())
+        mockMvc = MockMvcBuilders.standaloneSetup(new MailhogController(mailhogService, emlContentExtractor, mailhogReplyService))
+                .setControllerAdvice(new MailhogExceptionHandler(), new PermissionExceptionHandler())
                 .build();
     }
 
@@ -255,6 +273,147 @@ class MailhogControllerTest {
         mockMvc.perform(get("/api/email/messages/abc123/content").header("version", "1"))
                 .andExpect(status().isInternalServerError())
                 .andExpect(jsonPath("$.message").value("Failed to parse MailHog message: abc123"));
+    }
+
+    @Test
+    void downloadMessageEmlReturnsRawBytesAsAttachment() throws Exception {
+        var eml = "Subject: Test\r\n\r\nbody".getBytes(StandardCharsets.UTF_8);
+        when(mailhogService.getMessageEml("abc123@mailhog.example")).thenReturn(eml);
+
+        mockMvc.perform(get("/api/email/messages/abc123@mailhog.example/eml").header("version", "1"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Type", "message/rfc822"))
+                .andExpect(header().string("Content-Disposition", "attachment; filename=\"abc123@mailhog.example.eml\""))
+                .andExpect(content().bytes(eml));
+
+        verifyNoInteractions(emlContentExtractor);
+    }
+
+    @Test
+    void downloadMessageEmlRequiresVersionHeader() throws Exception {
+        mockMvc.perform(get("/api/email/messages/abc123/eml"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void downloadMessageEmlReturnsJsonNotFoundWhenMessageMissing() throws Exception {
+        when(mailhogService.getMessageEml("missing"))
+                .thenThrow(new MailhogMessageNotFoundException("missing"));
+
+        mockMvc.perform(get("/api/email/messages/missing/eml").header("version", "1"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("MailHog message not found: missing"));
+    }
+
+    @Test
+    void downloadMessageEmlReturnsJsonNotFoundEvenWhenClientAcceptsOnlyEml() throws Exception {
+        when(mailhogService.getMessageEml("missing"))
+                .thenThrow(new MailhogMessageNotFoundException("missing"));
+
+        mockMvc.perform(get("/api/email/messages/missing/eml").header("version", "1")
+                        .accept("message/rfc822"))
+                .andExpect(status().isNotFound())
+                .andExpect(header().string("Content-Type", "application/json"))
+                .andExpect(jsonPath("$.message").value("MailHog message not found: missing"));
+    }
+
+    @Test
+    void downloadMessageEmlReturnsNotFoundWhenMailhogUnavailable() throws Exception {
+        when(mailhogService.getMessageEml("abc123"))
+                .thenThrow(new MailhogUnavailableException("MailHog is unavailable at http://localhost:8025: timeout", null));
+
+        mockMvc.perform(get("/api/email/messages/abc123/eml").header("version", "1"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("MailHog is unavailable at http://localhost:8025: timeout"));
+    }
+
+    @Test
+    void replySendsReplyToSenderOnly() throws Exception {
+        mockMvc.perform(post("/api/email/messages/abc123/reply").header("version", "1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(REPLY_JSON))
+                .andExpect(status().isOk());
+
+        var captor = ArgumentCaptor.forClass(MailhogReplyRequest.class);
+        verify(mailhogReplyService).reply(eq("abc123"), captor.capture(), eq(false));
+        assertEquals("bob@example.com", captor.getValue().getFrom());
+        assertEquals("<p>Thanks!</p>", captor.getValue().getContent());
+    }
+
+    @Test
+    void replyAllSendsReplyToAllRecipients() throws Exception {
+        mockMvc.perform(post("/api/email/messages/abc123/reply-all").header("version", "1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(REPLY_JSON))
+                .andExpect(status().isOk());
+
+        verify(mailhogReplyService).reply(eq("abc123"), any(MailhogReplyRequest.class), eq(true));
+    }
+
+    @Test
+    void replyRequiresVersionHeader() throws Exception {
+        mockMvc.perform(post("/api/email/messages/abc123/reply")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(REPLY_JSON))
+                .andExpect(status().isNotFound());
+
+        verifyNoInteractions(mailhogReplyService);
+    }
+
+    @Test
+    void replyRejectsBlankContent() throws Exception {
+        mockMvc.perform(post("/api/email/messages/abc123/reply").header("version", "1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"from\": \"bob@example.com\", \"content\": \" \"}"))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(mailhogReplyService);
+    }
+
+    @Test
+    void replyRejectsInvalidFrom() throws Exception {
+        mockMvc.perform(post("/api/email/messages/abc123/reply-all").header("version", "1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"from\": \"not an address\", \"content\": \"<p>Thanks!</p>\"}"))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(mailhogReplyService);
+    }
+
+    @Test
+    void replyReturnsForbiddenWhenPermissionDenied() throws Exception {
+        doThrow(new PermissionException("Sender is not authorized: bob@example.com"))
+                .when(mailhogReplyService).reply(eq("abc123"), any(MailhogReplyRequest.class), anyBoolean());
+
+        mockMvc.perform(post("/api/email/messages/abc123/reply").header("version", "1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(REPLY_JSON))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("Sender is not authorized: bob@example.com"));
+    }
+
+    @Test
+    void replyReturnsNotFoundWhenMessageMissing() throws Exception {
+        doThrow(new MailhogMessageNotFoundException("missing"))
+                .when(mailhogReplyService).reply(eq("missing"), any(MailhogReplyRequest.class), anyBoolean());
+
+        mockMvc.perform(post("/api/email/messages/missing/reply-all").header("version", "1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(REPLY_JSON))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("MailHog message not found: missing"));
+    }
+
+    @Test
+    void replyReturnsBadRequestWhenNobodyToReplyTo() throws Exception {
+        doThrow(new MailhogReplyNoRecipientsException("abc123"))
+                .when(mailhogReplyService).reply(eq("abc123"), any(MailhogReplyRequest.class), anyBoolean());
+
+        mockMvc.perform(post("/api/email/messages/abc123/reply").header("version", "1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(REPLY_JSON))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("No recipients to reply to for MailHog message: abc123"));
     }
 
     private MailhogMessage singleMessage(String id, String subject) {

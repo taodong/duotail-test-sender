@@ -349,6 +349,33 @@ class EmlContentExtractorTest {
         assertFalse(content.headers().isEmpty());
     }
 
+    @Test
+    void extractBodiesReturnsBothBodiesWithoutTheContentBudget() throws Exception {
+        var smallBudget = new EmlContentExtractor(10);
+        var eml = eml(
+                "Subject: Test",
+                "MIME-Version: 1.0",
+                "Content-Type: multipart/alternative; boundary=\"b\"",
+                "",
+                "--b",
+                "Content-Type: text/plain; charset=UTF-8",
+                "",
+                "a plain body longer than ten characters",
+                "--b",
+                "Content-Type: text/html; charset=UTF-8",
+                "",
+                "<p>an html body longer than ten characters</p>",
+                "--b--");
+        var message = new jakarta.mail.internet.MimeMessage(
+                jakarta.mail.Session.getInstance(new java.util.Properties()), new java.io.ByteArrayInputStream(eml));
+
+        var bodies = smallBudget.extractBodies("abc123", message);
+
+        assertEquals("a plain body longer than ten characters", bodies.textBody().strip());
+        assertEquals("<p>an html body longer than ten characters</p>", bodies.htmlBody().strip());
+        assertTrue(smallBudget.extract("abc123", eml).truncated(), "extract must still apply the budget");
+    }
+
     private byte[] eml(String... lines) {
         return String.join("\r\n", lines).getBytes(StandardCharsets.UTF_8);
     }

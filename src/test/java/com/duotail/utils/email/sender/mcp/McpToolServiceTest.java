@@ -2,6 +2,7 @@ package com.duotail.utils.email.sender.mcp;
 
 import com.duotail.utils.email.mailhog.EmlContentExtractor;
 import com.duotail.utils.email.mailhog.MailhogMessageNotFoundException;
+import com.duotail.utils.email.mailhog.MailhogReplyService;
 import com.duotail.utils.email.mailhog.MailhogService;
 import com.duotail.utils.email.mailhog.MailhogUnavailableException;
 import com.duotail.utils.email.mailhog.dto.EmailAttachment;
@@ -12,6 +13,7 @@ import com.duotail.utils.email.mailhog.dto.MailhogContent;
 import com.duotail.utils.email.mailhog.dto.MailhogMessage;
 import com.duotail.utils.email.mailhog.dto.MailhogPageResponse;
 import com.duotail.utils.email.mailhog.dto.MailhogPath;
+import com.duotail.utils.email.mailhog.dto.MailhogReplyRequest;
 import com.duotail.utils.email.sender.BounceEmailService;
 import com.duotail.utils.email.sender.BounceRequest;
 import com.duotail.utils.email.sender.BounceType;
@@ -53,11 +55,43 @@ class McpToolServiceTest {
     @Mock
     private EmlContentExtractor emlContentExtractor;
 
+    @Mock
+    private MailhogReplyService mailhogReplyService;
+
     private McpToolService mcpToolService;
 
     @BeforeEach
     void setUp() {
-        mcpToolService = new McpToolService(emailSendService, bounceEmailService, mailhogService, emlContentExtractor);
+        mcpToolService = new McpToolService(emailSendService, bounceEmailService, mailhogService, emlContentExtractor,
+                mailhogReplyService);
+    }
+
+    @Test
+    void replyToMailhogMessageDelegatesReply() throws Exception {
+        var result = mcpToolService.replyToMailhogMessage("abc123", "bob@example.com", "<p>Thanks!</p>", false);
+
+        var captor = ArgumentCaptor.forClass(MailhogReplyRequest.class);
+        verify(mailhogReplyService).reply(eq("abc123"), captor.capture(), eq(false));
+        assertEquals("bob@example.com", captor.getValue().getFrom());
+        assertEquals("<p>Thanks!</p>", captor.getValue().getContent());
+        assertEquals("Reply sent to message abc123.", result);
+    }
+
+    @Test
+    void replyToMailhogMessageDelegatesReplyAll() throws Exception {
+        var result = mcpToolService.replyToMailhogMessage("abc123", "bob@example.com", "<p>Thanks!</p>", true);
+
+        verify(mailhogReplyService).reply(eq("abc123"), any(MailhogReplyRequest.class), eq(true));
+        assertEquals("Reply-all sent to message abc123.", result);
+    }
+
+    @Test
+    void replyToMailhogMessagePropagatesNotFound() throws Exception {
+        doThrow(new MailhogMessageNotFoundException("missing"))
+                .when(mailhogReplyService).reply(eq("missing"), any(MailhogReplyRequest.class), anyBoolean());
+
+        assertThrows(MailhogMessageNotFoundException.class,
+                () -> mcpToolService.replyToMailhogMessage("missing", "bob@example.com", "<p>Thanks!</p>", true));
     }
 
     @Test

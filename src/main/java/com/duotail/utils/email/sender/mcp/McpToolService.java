@@ -1,10 +1,12 @@
 package com.duotail.utils.email.sender.mcp;
 
 import com.duotail.utils.email.mailhog.EmlContentExtractor;
+import com.duotail.utils.email.mailhog.MailhogReplyService;
 import com.duotail.utils.email.mailhog.MailhogService;
 import com.duotail.utils.email.mailhog.dto.EmailContent;
 import com.duotail.utils.email.mailhog.dto.MailhogPageResponse;
 import com.duotail.utils.email.mailhog.dto.MailhogPath;
+import com.duotail.utils.email.mailhog.dto.MailhogReplyRequest;
 import com.duotail.utils.email.sender.BounceEmailService;
 import com.duotail.utils.email.sender.BounceRequest;
 import com.duotail.utils.email.sender.EmailRequest;
@@ -28,15 +30,18 @@ public class McpToolService {
     private final BounceEmailService bounceEmailService;
     private final MailhogService mailhogService;
     private final EmlContentExtractor emlContentExtractor;
+    private final MailhogReplyService mailhogReplyService;
 
     public McpToolService(EmailSendService emailSendService,
                           BounceEmailService bounceEmailService,
                           MailhogService mailhogService,
-                          EmlContentExtractor emlContentExtractor) {
+                          EmlContentExtractor emlContentExtractor,
+                          MailhogReplyService mailhogReplyService) {
         this.emailSendService = emailSendService;
         this.bounceEmailService = bounceEmailService;
         this.mailhogService = mailhogService;
         this.emlContentExtractor = emlContentExtractor;
+        this.mailhogReplyService = mailhogReplyService;
     }
 
     @McpTool(description = "Send one HTML email using a structured request object")
@@ -124,6 +129,21 @@ public class McpToolService {
     ) {
         mailhogService.deleteMessage(id);
         return "Message " + id + " deleted successfully.";
+    }
+
+    @McpTool(description = "Reply (or reply all) to an email captured by MailHog. "
+            + "The reply quotes the original, is threaded via In-Reply-To/References, and is sent over SMTP.")
+    public String replyToMailhogMessage(
+            @McpToolParam(description = "The MailHog message ID") String id,
+            @McpToolParam(description = "The replier's email address, either 'address' or 'Name <address>'") String from,
+            @McpToolParam(description = "The reply body (HTML is supported)") String content,
+            @McpToolParam(description = "true to reply to all recipients, false to reply to the sender only") boolean replyAll
+    ) throws MessagingException, PermissionException {
+        var request = new MailhogReplyRequest();
+        request.setFrom(from);
+        request.setContent(content);
+        mailhogReplyService.reply(id, request, replyAll);
+        return (replyAll ? "Reply-all" : "Reply") + " sent to message " + id + ".";
     }
 
     private String formatResponse(MailhogPageResponse response) {
