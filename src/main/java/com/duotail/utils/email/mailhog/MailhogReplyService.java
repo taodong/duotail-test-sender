@@ -87,11 +87,13 @@ public class MailhogReplyService {
 
     /**
      * Parses the original with a session whose {@code mail.from} is the replier, which is how
-     * {@link MimeMessage#reply(boolean)} recognises "me" among the original To/Cc.
+     * {@link MimeMessage#reply(boolean)} recognises "me" among the original To/Cc. Raw UTF-8 header
+     * bytes are read as UTF-8 rather than Latin-1, so a non-ASCII display name survives the reply.
      */
     private MimeMessage parse(String id, byte[] eml, String replierAddress) {
         var properties = new Properties();
         properties.setProperty("mail.from", replierAddress);
+        properties.setProperty("mail.mime.allowutf8", "true");
         try (var stream = new ByteArrayInputStream(eml)) {
             return new MimeMessage(Session.getInstance(properties, null), stream);
         } catch (MessagingException | IOException e) {

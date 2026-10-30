@@ -295,6 +295,25 @@ class MailhogReplyServiceTest {
     }
 
     @Test
+    void replyKeepsRawUtf8DisplayNameIntact() throws Exception {
+        // POST /api/email writes non-ASCII display names as raw UTF-8 rather than RFC 2047
+        givenEml("""
+                From: "Alic\u00e9" <alice@example.com>\r
+                To: bob@example.com\r
+                Subject: Hi\r
+                Content-Type: text/plain; charset=UTF-8\r
+                \r
+                body\r
+                """);
+
+        mailhogReplyService.reply(ID, request("bob@example.com"), false);
+
+        var reply = sentMessage();
+        assertEquals("Alic\u00e9", ((InternetAddress) reply.getRecipients(Message.RecipientType.TO)[0]).getPersonal());
+        assertTrue(((String) reply.getContent()).contains("&quot;Alic\u00e9&quot; &lt;alice@example.com&gt; wrote:"));
+    }
+
+    @Test
     void replyRejectsInvalidRequestWithoutSending() {
         var request = new MailhogReplyRequest();
         request.setFrom("not an address");

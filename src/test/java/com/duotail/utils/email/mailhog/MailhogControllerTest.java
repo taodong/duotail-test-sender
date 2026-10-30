@@ -306,6 +306,18 @@ class MailhogControllerTest {
     }
 
     @Test
+    void downloadMessageEmlReturnsJsonNotFoundEvenWhenClientAcceptsOnlyEml() throws Exception {
+        when(mailhogService.getMessageEml("missing"))
+                .thenThrow(new MailhogMessageNotFoundException("missing"));
+
+        mockMvc.perform(get("/api/email/messages/missing/eml").header("version", "1")
+                        .accept("message/rfc822"))
+                .andExpect(status().isNotFound())
+                .andExpect(header().string("Content-Type", "application/json"))
+                .andExpect(jsonPath("$.message").value("MailHog message not found: missing"));
+    }
+
+    @Test
     void downloadMessageEmlReturnsNotFoundWhenMailhogUnavailable() throws Exception {
         when(mailhogService.getMessageEml("abc123"))
                 .thenThrow(new MailhogUnavailableException("MailHog is unavailable at http://localhost:8025: timeout", null));
