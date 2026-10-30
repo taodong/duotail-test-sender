@@ -25,6 +25,16 @@ public class MailhogExceptionHandler {
     }
 
     /**
+     * The message exists but leaves nobody to reply to, which is a problem with the request, not the server.
+     */
+    @SuppressWarnings("unused")
+    @ExceptionHandler(MailhogReplyNoRecipientsException.class)
+    public ResponseEntity<Map<String, String>> handle(MailhogReplyNoRecipientsException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(Map.of("message", ex.getMessage()));
+    }
+
+    /**
      * Distinct from the 404s above: the message was found, it just could not be parsed.
      */
     @SuppressWarnings("unused")

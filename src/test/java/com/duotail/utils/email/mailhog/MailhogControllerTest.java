@@ -392,6 +392,18 @@ class MailhogControllerTest {
                 .andExpect(jsonPath("$.message").value("MailHog message not found: missing"));
     }
 
+    @Test
+    void replyReturnsBadRequestWhenNobodyToReplyTo() throws Exception {
+        doThrow(new MailhogReplyNoRecipientsException("abc123"))
+                .when(mailhogReplyService).reply(eq("abc123"), any(MailhogReplyRequest.class), anyBoolean());
+
+        mockMvc.perform(post("/api/email/messages/abc123/reply").header("version", "1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(REPLY_JSON))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("No recipients to reply to for MailHog message: abc123"));
+    }
+
     private MailhogMessage singleMessage(String id, String subject) {
         return new MailhogMessage(
                 id,

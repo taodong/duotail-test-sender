@@ -60,13 +60,7 @@ public class EmlContentExtractor {
             throw new MailhogMessageParseException(id, e);
         }
 
-        try {
-            collectParts(message, accumulator);
-        } catch (MessagingException | IOException e) {
-            // The MIME tree is malformed below the top level. Keep the headers and whatever parts
-            // were collected rather than failing the whole message.
-            LOG.warn("Failed to walk MIME parts for MailHog message id={}; returning partial content", id, e);
-        }
+        collectPartsLeniently(id, message, accumulator);
 
         // One budget for everything decoded, spent in priority order: the bodies a caller usually
         // wants first, then the remaining parts. Capping each piece separately would let a message
@@ -87,6 +81,27 @@ public class EmlContentExtractor {
                 accumulator.attachments,
                 otherParts,
                 budget.truncated());
+    }
+
+    /**
+     * Decodes only the first inline text/plain and text/html bodies of an already parsed message,
+     * with no content budget. For callers that embed a body (such as a reply quote), where a
+     * truncated body would be corrupt rather than merely short.
+     */
+    public Bodies extractBodies(String id, MimeMessage message) {
+        var accumulator = new Accumulator();
+        collectPartsLeniently(id, message, accumulator);
+        return new Bodies(accumulator.textBody, accumulator.htmlBody);
+    }
+
+    private void collectPartsLeniently(String id, MimeMessage message, Accumulator accumulator) {
+        try {
+            collectParts(message, accumulator);
+        } catch (MessagingException | IOException e) {
+            // The MIME tree is malformed below the top level. Keep the headers and whatever parts
+            // were collected rather than failing the whole message.
+            LOG.warn("Failed to walk MIME parts for MailHog message id={}; returning partial content", id, e);
+        }
     }
 
     private void collectHeaders(MimeMessage message, Accumulator accumulator) throws MessagingException {
@@ -233,6 +248,11 @@ public class EmlContentExtractor {
             return truncated;
         }
     }
+
+    /**
+     * The decoded bodies of a message; either is null when the message has no such part.
+     */
+    public record Bodies(String textBody, String htmlBody) {}
 
     /**
      * Mutable state for a single extraction. Held locally so the component stays stateless.

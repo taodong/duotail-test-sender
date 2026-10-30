@@ -95,7 +95,9 @@ public class EmailSendService {
 
     public void sendMimeMessage(MimeMessage message) throws MessagingException, PermissionException {
         validateMimeMessagePermissions(message);
-        LOG.info("Sending pre-built MIME message [subject: '{}' ]", message.getSubject());
+        LOG.info("Sending pre-built MIME message [from: {} | to: {} | subject: '{}' ]",
+                joinAddresses(message.getFrom()), joinAddresses(message.getRecipients(Message.RecipientType.TO)),
+                message.getSubject());
         javaMailSender.send(message);
     }
 

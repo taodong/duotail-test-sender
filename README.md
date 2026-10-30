@@ -444,6 +444,98 @@ curl http://localhost:8080/api/email/messages/abc123/content \
 
 ---
 
+### 10. Download Captured Email as EML (MailHog)
+
+Download a single email captured by a MailHog server as a raw `.eml` file. The bytes are returned exactly as MailHog stores them.
+
+| Property | Value |
+|---|---|
+| **Method** | `GET` |
+| **Path** | `/api/email/messages/{id}/eml` |
+| **Required header** | `version: 1` |
+
+#### Path Parameters
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `id` | string | Yes | The MailHog message ID |
+
+#### Response
+
+| Status | Body | Condition |
+|---|---|---|
+| `200 OK` | Raw `.eml` bytes, `Content-Type: message/rfc822`, `Content-Disposition: attachment; filename="{id}.eml"` | Message found |
+| `404 Not Found` | `{ "message": "MailHog message not found: {id}" }` | No message exists with the given ID |
+| `404 Not Found` | `{ "message": "..." }` | MailHog server is unreachable or returned an error |
+
+#### Example
+
+```bash
+curl -OJ http://localhost:8080/api/email/messages/abc123/eml \
+  -H "version: 1"
+```
+
+`-OJ` saves the file under the name from `Content-Disposition`.
+
+---
+
+### 11. Reply to Captured Email (MailHog)
+
+Build a reply to an email captured by a MailHog server and send it over SMTP. The reply is threaded with the original (`In-Reply-To` / `References`), its subject gets a `Re:` prefix, and the original body is quoted below the reply content. Original attachments are not forwarded.
+
+| Property | Value |
+|---|---|
+| **Method** | `POST` |
+| **Path** | `/api/email/messages/{id}/reply` (sender only) or `/api/email/messages/{id}/reply-all` (sender and all other recipients) |
+| **Required header** | `version: 1` |
+| **Content-Type** | `application/json` |
+
+#### Path Parameters
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `id` | string | Yes | The MailHog message ID |
+
+#### Request Body (`MailhogReplyRequest`)
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `from` | `string` | Yes | The replier's address, either `address` or `Name <address>` |
+| `content` | `string` | Yes | The reply body (HTML is supported) |
+
+#### Recipients
+
+- **Reply:** `To` is the original `Reply-To`, or the original `From` if there is no `Reply-To`.
+- **Reply all:** as above, plus the original `To` recipients in `To` and the original `Cc` recipients in `Cc`. Duplicates are removed. Original `Bcc` recipients are never included.
+- In both cases the replier (`from`) is removed from every recipient list, so replying to your own message does not mail yourself. If nobody is left, the request fails with `400`.
+- The subject gets a `Re:` prefix unless it already has one (in any case, including encoded subjects).
+- The quote keeps only the original HTML's `<body>` content, without its styles, scripts, or `cid:` inline images.
+
+All addresses are checked against the sender permissions, the same as other send endpoints.
+
+#### Response
+
+| Status | Body | Condition |
+|---|---|---|
+| `200 OK` | _(empty)_ | Reply sent |
+| `400 Bad Request` | Validation error | `from` missing or invalid, or `content` blank |
+| `400 Bad Request` | `{ "message": "No recipients to reply to for MailHog message: {id}" }` | Nobody is left to reply to (see Recipients) |
+| `403 Forbidden` | `{ "message": "..." }` | Sender or a recipient is not authorized |
+| `404 Not Found` | `{ "message": "MailHog message not found: {id}" }` | No message exists with the given ID |
+| `404 Not Found` | `{ "message": "..." }` | MailHog server is unreachable or returned an error |
+| `500 Internal Server Error` | `{ "message": "Failed to parse MailHog message: {id}" }` | The captured message could not be parsed |
+
+#### Example
+
+```bash
+curl -X POST http://localhost:8080/api/email/messages/abc123/reply-all \
+  -H "version: 1" \
+  -H "Content-Type: application/json" \
+  -d '{"from": "bob@example.com", "content": "<p>Thanks!</p>"}'
+```
+
+---
+
 ## MCP Tools
 
 The service registers the following tools with the MCP (Model Context Protocol) server. They mirror the REST API and share the same underlying `EmailSendService`.
@@ -647,6 +739,23 @@ shared by the bodies and parts — is cut and marked with `...[truncated]`.
 
 ---
 
+### Tool: `replyToMailhogMessage`
+
+**Description:** Reply (or reply all) to an email captured by MailHog. The reply quotes the original, is threaded via `In-Reply-To` / `References`, and is sent over SMTP. Same behavior as REST § 11.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `id` | string | Yes | The MailHog message ID |
+| `from` | string | Yes | The replier's address, either `address` or `Name <address>` |
+| `content` | string | Yes | The reply body (HTML is supported) |
+| `replyAll` | boolean | Yes | `true` to reply to all recipients, `false` to reply to the sender only |
+
+**Returns:** `"Reply sent to message {id}."` or `"Reply-all sent to message {id}."` on success.
+
+---
+
 ## Configuration
 
 ### `application.yaml` Property
@@ -765,3 +874,4 @@ batchSize: 25
 | EML parse/IO error | `500 Internal Server Error` | Tool throws exception | Corrupted or unreadable `.eml` content |
 | `MailhogUnavailableException` | `404 Not Found` | Tool throws exception | MailHog server is unreachable or returned an error |
 | `MailhogMessageNotFoundException` | `404 Not Found` | Tool throws exception | Message ID not found in MailHog |
+| `MailhogReplyNoRecipientsException` | `400 Bad Request` | Tool throws exception | A reply would have no recipients after removing the replier |

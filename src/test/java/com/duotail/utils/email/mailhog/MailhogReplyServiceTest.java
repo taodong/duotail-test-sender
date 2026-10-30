@@ -192,6 +192,109 @@ class MailhogReplyServiceTest {
     }
 
     @Test
+    void replyToOwnMessageDoesNotAddressTheReplier() throws Exception {
+        givenEml(HTML_EML);
+
+        mailhogReplyService.reply(ID, request("alice@example.com"), true);
+
+        var reply = sentMessage();
+        assertEquals(List.of("bob@example.com", "carol@example.com"),
+                addresses(reply.getRecipients(Message.RecipientType.TO)));
+        assertEquals(List.of("dave@example.com"), addresses(reply.getRecipients(Message.RecipientType.CC)));
+    }
+
+    @Test
+    void replyFailsWithoutSendingWhenNobodyIsLeftToReplyTo() {
+        givenEml("""
+                From: alice@example.com\r
+                To: alice@example.com\r
+                Subject: Note to self\r
+                \r
+                body\r
+                """);
+
+        assertThrows(MailhogReplyNoRecipientsException.class,
+                () -> mailhogReplyService.reply(ID, request("alice@example.com"), true));
+
+        verifyNoInteractions(emailSendService);
+    }
+
+    @Test
+    void replyFailsWhenOriginalHasNoSender() {
+        givenEml("""
+                To: bob@example.com\r
+                Subject: Anonymous\r
+                \r
+                body\r
+                """);
+
+        assertThrows(MailhogReplyNoRecipientsException.class,
+                () -> mailhogReplyService.reply(ID, request("bob@example.com"), false));
+
+        verifyNoInteractions(emailSendService);
+    }
+
+    @Test
+    void replyDoesNotStackRePrefixOnEncodedOrUppercaseSubjects() throws Exception {
+        givenEml("""
+                From: alice@example.com\r
+                To: bob@example.com\r
+                Subject: =?UTF-8?B?UmU6IOS9oOWlvQ==?=\r
+                \r
+                body\r
+                """);
+        mailhogReplyService.reply(ID, request("bob@example.com"), false);
+        assertEquals("Re: \u4f60\u597d", sentMessage().getSubject());
+
+        org.mockito.Mockito.clearInvocations(emailSendService);
+        givenEml("""
+                From: alice@example.com\r
+                To: bob@example.com\r
+                Subject: RE:foo\r
+                \r
+                body\r
+                """);
+        mailhogReplyService.reply(ID, request("bob@example.com"), false);
+        assertEquals("RE:foo", sentMessage().getSubject());
+    }
+
+    @Test
+    void replyQuotesOnlyBodyContentOfAnHtmlDocument() throws Exception {
+        givenEml("""
+                From: =?UTF-8?B?QWxpY8Op?= <alice@example.com>\r
+                To: bob@example.com\r
+                Subject: Styled\r
+                Content-Type: text/html; charset=UTF-8\r
+                \r
+                <!DOCTYPE html><html><head><style>p{color:#fff}</style></head>\r
+                <body class="x"><style>.y{}</style><p>Kept</p><img src="cid:logo@x"><img src="https://x/a.png"></body></html>\r
+                """);
+
+        mailhogReplyService.reply(ID, request("bob@example.com"), false);
+
+        var body = (String) sentMessage().getContent();
+        assertTrue(body.contains("<p>Kept</p>"), body);
+        assertTrue(body.contains("<img src=\"https://x/a.png\">"), body);
+        assertTrue(body.contains("&quot;Alic\u00e9&quot; &lt;alice@example.com&gt; wrote:"), body);
+        for (var removed : List.of("<style", "<head", "<html", "<body", "DOCTYPE", "cid:")) {
+            assertFalse(body.contains(removed), removed + " must be removed: " + body);
+        }
+    }
+
+    @Test
+    void replyQuotesLargeOriginalWhole() throws Exception {
+        mailhogReplyService = new MailhogReplyService(mailhogService, new EmlContentExtractor(10), emailSendService,
+                Validation.buildDefaultValidatorFactory().getValidator());
+        givenEml(HTML_EML);
+
+        mailhogReplyService.reply(ID, request("bob@example.com"), false);
+
+        var body = (String) sentMessage().getContent();
+        assertTrue(body.contains("<p>Original body</p>"), body);
+        assertFalse(body.contains("[truncated]"), body);
+    }
+
+    @Test
     void replyRejectsInvalidRequestWithoutSending() {
         var request = new MailhogReplyRequest();
         request.setFrom("not an address");
